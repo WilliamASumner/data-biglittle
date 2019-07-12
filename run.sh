@@ -5,7 +5,7 @@ STHHAMP_DIR="/home/odroid/experimental-platform-software"
 MONOUT_DIR="$CURR_DIR/powmon-data"
 JSON_DIR="$CURR_DIR/json-data"
 SUFFIX="all"
-PROG_NAME = $0
+PROG_NAME=$0
 
 give_usage() {
 	echo "usage: sudo $PROG_NAME [core-config:{x}B-{y}L] [output-filename]" >&2
