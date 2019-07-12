@@ -114,7 +114,17 @@ get_config() {
 		unset IFS
 		bigStr="${bigSorted[*]}"
 	fi
-	config_str="$lilStr $bigStr"
+
+	if ! [ -z "$lilStr" ]; then
+		if ! [ -z "$bigStr" ]; then
+			config_str="$lilStr $bigStr"
+		else
+			config_str="$lilStr"
+		fi
+	else
+		config_str="$bigStr"
+	fi
+
 	echo ${config_str// /,}
 }
 
@@ -133,18 +143,21 @@ sigint() {
 
 # Startup checks
 if [ "$EUID" -ne 0 ]; then
-	echo "Error: sudo privileges needed by this script"
+	echo "error: sudo privileges needed by this script"
 	give_usage
 elif ! [[ `lsmod | grep perf` ]]; then
-	echo "Error: perf kernel module not found."
+	echo "error: perf kernel module not found."
 	echo "please run sudo insmod -f $STHHAMP_DIR/datalogging_code/perf.ko"
 	give_usage
 elif [ $# -lt 2 ]; then
-	echo "Error: not enough args"
+	echo "error: not enough args"
 	give_usage
 elif [[ `check_core_config $1` ]]; then
-	echo "Error: invalid core configuration $1"
+	echo "error: invalid core configuration $1"
 	give_usage
+fi
+if [[ $2 == "test" ]]; then
+	echo "performing a dry run..."
 fi
 
 trap 'sigint' SIGINT 
@@ -154,22 +167,24 @@ core_config=$(get_config $1)
 SUFFIX=$core_config
 
 # start up firefox in the background
-echo "Starting up firefox with cores: $core_config..."
+echo "starting up firefox with cores: $core_config..."
 echo "sudo -u odroid taskset -c $core_config firefox $BBENCH_DIR/index.html &"
-sudo -u odroid taskset -c $core_config firefox "$BBENCH_DIR/index.html" &
-
+if ! [[ $2 == "test" ]]; then
+	sudo -u odroid taskset -c $core_config firefox "$BBENCH_DIR/index.html" &
+fi
 
 #perf options:[freq (Hz)] [timestamp] [per-thread] [addresses]
 #perf record -F 99 --call-graph dwarf -T -s -d -- sudo -u odroid firefox "$BBENCH_DIR/index.html" &
 
 # start up the southhampton monitor
 # options are: [outputfile] [period (us)] [use-pmcs] [performance counters...]
-echo "Starting southhampton monitor"
+echo "starting southhampton monitor"
 echo "$STHHAMP_DIR/datalogging_code/cdatalog $MONOUT_DIR/$2-$SUFFIX 10000 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &"
-"$STHHAMP_DIR/datalogging_code/cdatalog" "$MONOUT_DIR/$2-$SUFFIX" 10000 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &
+if ! [[ $2 == "test" ]]; then
+	"$STHHAMP_DIR/datalogging_code/cdatalog" "$MONOUT_DIR/$2-$SUFFIX" 10000 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &
 
-wait `pgrep firefox` # wait until firefox is done
+	wait `pgrep firefox` # wait until firefox is done
+	kill `pgrep cdatalog` # try killing the monitor just to be sure
+	mv ~/Downloads/info.txt "$JSON_DIR/$2-$SUFFIX.json"
+fi
 
-kill `pgrep cdatalog` # try killing the monitor just to be sure
-
-mv ~/Downloads/info.txt "$JSON_DIR/$2-$SUFFIX.json"
