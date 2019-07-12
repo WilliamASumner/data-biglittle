@@ -12,6 +12,19 @@ give_usage() {
 	exit
 }
 
+array_contains () {
+	local array="$1[@]"
+	local seeking=$2
+	local in=1
+	for element in "${!array}"; do
+		if [[ $element == $seeking ]]; then
+			in=0
+			break
+		fi
+	done
+	return $in
+}
+
 check_core_config() {
 	if ! [[ `echo $1 | grep -i B` ]] || ! [[ `echo $1 | grep -i L` ]]; then # there's a missing b/l
 		echo "error"
@@ -137,8 +150,9 @@ fi
 trap 'sigint' SIGINT 
 
 # Preprocessing 
-
 core_config=$(get_config $1)
+SUFFIX=$core_config
+
 # start up firefox in the background
 echo "Starting up firefox with cores: $core_config..."
 echo "sudo -u odroid taskset -c $core_config firefox $BBENCH_DIR/index.html &"
