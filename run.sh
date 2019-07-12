@@ -36,6 +36,7 @@ fi
 trap 'sigint' SIGINT 
 
 # Preprocessing 
+#TODO add more configurations 'xB-yL'
 if [[ `echo $1 | grep 0-3` ]]; then # running on all little
 	echo "little configuration detected"
 	SUFFIX="little"
@@ -64,4 +65,4 @@ wait `pgrep firefox` # wait until firefox is done
 
 kill `pgrep cdatalog` # try killing the monitor just to be sure
 
-mv ~/Downloads/info.txt $JSON_DIR/$2-$SUFFIX.json
+mv ~/Downloads/info.txt "$JSON_DIR/$2-$SUFFIX.json"
