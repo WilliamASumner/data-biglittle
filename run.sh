@@ -6,6 +6,8 @@ MONOUT_DIR="$CURR_DIR/powmon-data"
 JSON_DIR="$CURR_DIR/json-data"
 SUFFIX="all"
 PROG_NAME=$0
+CORE_CONFIG=$1
+OUTPUT_FILE=$2
 
 give_usage() {
 	echo "usage: sudo $PROG_NAME [core-config:{x}B-{y}L] [output-filename]" >&2
@@ -136,7 +138,7 @@ sigint() {
 	echo "killing firefox"
 	kill `pgrep firefox`
 
-	mv ~/Downloads/info.txt $JSON_DIR/$2-$SUFFIX.json # save bbench output
+	mv ~/Downloads/info.txt $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json # save bbench output
 
 	exit 0
 }
@@ -152,25 +154,25 @@ elif ! [[ `lsmod | grep perf` ]]; then
 elif [ $# -lt 2 ]; then
 	echo "error: not enough args"
 	give_usage
-elif [[ `check_core_config $1` ]]; then
-	echo "error: invalid core configuration $1"
+elif [[ `check_core_config $CORE_CONFIG` ]]; then
+	echo "error: invalid core configuration $CORE_CONFIG"
 	give_usage
 fi
-if [[ $2 == "test" ]]; then
+if [[ $OUTPUT_FILE == "test" ]]; then
 	echo "performing a dry run..."
 fi
 
 trap 'sigint' SIGINT 
 
 # Preprocessing 
-core_config=$(get_config $1)
-SUFFIX=$core_config
+core_config_flag=$(get_config $CORE_CONFIG)
+SUFFIX=$core_config_flag
 
 # start up firefox in the background
-echo "starting up firefox with cores: $core_config..."
-echo "sudo -u odroid taskset -c $core_config firefox $BBENCH_DIR/index.html &"
-if ! [[ $2 == "test" ]]; then
-	sudo -u odroid taskset -c $core_config firefox "$BBENCH_DIR/index.html" &
+echo "starting up firefox with cores: $core_config_flag..."
+echo "sudo -u odroid taskset -c $core_config_flag firefox $BBENCH_DIR/index.html &"
+if ! [[ $OUTPUT_FILE == "test" ]]; then
+	sudo -u odroid taskset -c $core_config_flag firefox "$BBENCH_DIR/index.html" &
 fi
 
 #perf options:[freq (Hz)] [timestamp] [per-thread] [addresses]
@@ -179,12 +181,12 @@ fi
 # start up the southhampton monitor
 # options are: [outputfile] [period (us)] [use-pmcs] [performance counters...]
 echo "starting southhampton monitor"
-echo "$STHHAMP_DIR/datalogging_code/cdatalog $MONOUT_DIR/$2-$SUFFIX 10000 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &"
-if ! [[ $2 == "test" ]]; then
-	"$STHHAMP_DIR/datalogging_code/cdatalog" "$MONOUT_DIR/$2-$SUFFIX" 10000 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &
+echo "$STHHAMP_DIR/datalogging_code/cdatalog $MONOUT_DIR/$OUTPUT_FILE-$SUFFIX 10000 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &"
+if ! [[ $OUTPUT_FILE == "test" ]]; then
+	"$STHHAMP_DIR/datalogging_code/cdatalog" "$MONOUT_DIR/$OUTPUT_FILE-$SUFFIX" 10000 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &
 
 	wait `pgrep firefox` # wait until firefox is done
 	kill `pgrep cdatalog` # try killing the monitor just to be sure
-	mv ~/Downloads/info.txt "$JSON_DIR/$2-$SUFFIX.json"
+	mv ~/Downloads/info.txt "$JSON_DIR/$OUTPUT_FILE-$SUFFIX.json"
 fi
 
