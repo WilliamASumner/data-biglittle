@@ -1,2 +1,4 @@
 test.sh
+.*.un~
+__pycache__
 powmon-data/.old-data
