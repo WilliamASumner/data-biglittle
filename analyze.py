@@ -93,9 +93,14 @@ def main():
 
     # diff the columns
     for column in pmcColumns:
-        diffs =  np.diff(pmcData[column]) / 1e6
+        diffs =  np.diff(pmcData[column])
+
+        diffs /= 1e6
         pmcData[column][:diffs.shape[0]] = diffs
         pmcData[column][0] = pmcData[column][1] # pad first entry with next val
+
+        # correct negative entries (due to overflow)
+        pmcData[column][pmcData[column] < 0] += (2**32 + 1)
 
     # compile stats for each site
     for i in range(iterations):
@@ -123,7 +128,7 @@ def main():
 
     features = ["avg","med","min","max","stddev"]
     dataHeaders = ["Core_Config","Load_Time(ms)","Energy(J)"] + \
-                  [column + "(Mips/sec)-" + features[i]
+                  [column + "(Mops/sec)-" + features[i]
                           for x in range(len(features)) for column in pmcColumns]
 
     with open("ml-output.txt","w") as outFile:
