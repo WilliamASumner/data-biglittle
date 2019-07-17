@@ -1,4 +1,5 @@
 #!/bin/bash
+HOME="/home/odroid"
 CURR_DIR="/home/odroid/data-collector"
 BBENCH_DIR="/home/odroid/bbench-3.0"
 STHHAMP_DIR="/home/odroid/experimental-platform-software"
@@ -136,9 +137,15 @@ sigint() {
 	kill `pgrep cdatalog`
 
 	echo "killing firefox"
-	kill `pgrep firefox`
+	if [[ `pgrep firefox` ]]; then
+		kill `pgrep firefox`
+	fi
 
-	mv ~/Downloads/info.txt $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json # save bbench output
+	if ! [ -f $HOME/Downloads/info.txt ]; then
+		echo "error: bbench did not write out a json file"
+	else 
+		mv $HOME/Downloads/info.txt $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json # save bbench output
+	fi
 
 	exit 0
 }
@@ -168,12 +175,6 @@ trap 'sigint' SIGINT
 core_config_flag=$(get_config $CORE_CONFIG)
 SUFFIX=$core_config_flag
 
-# start up firefox in the background
-echo "starting up firefox with cores: $core_config_flag..."
-echo "sudo -u odroid taskset -c $core_config_flag firefox $BBENCH_DIR/index.html &"
-if ! [[ $OUTPUT_FILE == "test" ]]; then
-	sudo -u odroid taskset -c $core_config_flag firefox "$BBENCH_DIR/index.html" &
-fi
 
 #perf options:[freq (Hz)] [timestamp] [per-thread] [addresses]
 #perf record -F 99 --call-graph dwarf -T -s -d -- sudo -u odroid firefox "$BBENCH_DIR/index.html" &
@@ -185,8 +186,17 @@ echo "$STHHAMP_DIR/datalogging_code/cdatalog $MONOUT_DIR/$OUTPUT_FILE-$SUFFIX 10
 if ! [[ $OUTPUT_FILE == "test" ]]; then
 	"$STHHAMP_DIR/datalogging_code/cdatalog" "$MONOUT_DIR/$OUTPUT_FILE-$SUFFIX" 10000 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &
 
-	wait `pgrep firefox` # wait until firefox is done
-	kill `pgrep cdatalog` # try killing the monitor just to be sure
-	mv ~/Downloads/info.txt "$JSON_DIR/$OUTPUT_FILE-$SUFFIX.json"
+	# start up firefox in the background
+	echo "starting up firefox with cores: $core_config_flag..."
+	echo "sudo -u odroid taskset -c $core_config_flag firefox $BBENCH_DIR/index.html &"
+	sudo -u odroid taskset -c $core_config_flag firefox "$BBENCH_DIR/index.html" &
+
+	wait
+
+	if ! [ -f $HOME/Downloads/info.txt ]; then
+		echo "error: bbench did not write out a json file"
+	else 
+		mv $HOME/Downloads/info.txt $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json # save bbench output
+	fi
 fi
 
