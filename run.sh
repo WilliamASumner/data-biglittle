@@ -3,15 +3,26 @@ HOME="/home/odroid"
 CURR_DIR="/home/odroid/data-collector"
 BBENCH_DIR="/home/odroid/bbench-3.0"
 STHHAMP_DIR="/home/odroid/experimental-platform-software"
+
 MONOUT_DIR="$CURR_DIR/powmon-data"
 JSON_DIR="$CURR_DIR/json-data"
 SUFFIX="all"
+
+
+AVAIL_GOVS="/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors"
+BIG_CPU_GOV="/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"
+LIL_CPU_GOV="/sys/devices/system/cpu/cpu7/cpufreq/scaling_governor"
+OLD_BIG_CPU_GOV=""
+OLD_LIL_CPU_GOV=""
+
+PROFILE_SAMPLE_RATE_US=200000
+
 PROG_NAME=$0
 CORE_CONFIG=$1
 OUTPUT_FILE=$2
 
 give_usage() {
-	echo "usage: sudo $PROG_NAME [core-config:{x}B-{y}L] [output-filename]" >&2
+	echo "usage: sudo $PROG_NAME [core-config:{x}l-{y}b] [output-filename]" >&2
 	exit
 }
 
@@ -131,6 +142,45 @@ get_config() {
 	echo ${config_str// /,}
 }
 
+set_governor() {
+	if ! [[ `cat $AVAIL_GOVS` ]]; then # no available governors
+		echo "error: unable to read available governors"
+		exit 1
+	elif ! [[ `cat $AVAIL_GOVS | grep performance` ]]; then # no performance governor
+		echo "error: no performance governor available"
+		exit 1
+	fi
+	OLD_BIG_CPU_GOV=`cat $BIG_CPU_GOV` # save the old state
+	OLD_LIL_CPU_GOV=`cat $LIL_CPU_GOV`
+
+	if [ -z $OLD_BIG_CPU_GOV ]; then
+		echo "error: unable to save big cluster governor"
+	fi
+	if [ -z $OLD_LIL_CPU_GOV ] ; then
+		echo "error: unable to save little cluster governor"
+	fi
+
+	echo "performance" > "$BIG_CPU_GOV"
+	echo "performance" > "$LIL_CPU_GOV"
+
+	# governor did not change...
+	if ! [[ `cat $BIG_CPU_GOV | grep performance` ]] || ! [[ `cat $LIL_CPU_GOV | grep performance` ]]; then
+		echo "error: unable to change governor"
+		exit 1
+	fi
+}
+
+restore_governor() {
+	if [ -z $OLD_BIG_CPU_GOV ]; then # couldn't save, don't try to restore
+		return
+	elif [ -z $OLD_LIL_CPU_GOV ] ; then
+		return
+	fi
+
+	echo $OLD_BIG_CPU_GOV > $BIG_CPU_GOV
+	echo $OLD_LIL_CPU_GOV > $LIL_CPU_GOV
+}
+
 sigint() {
 	echo "signal INT caught, cleaning up"
 	echo "killing cdatalog"
@@ -146,7 +196,7 @@ sigint() {
 	else 
 		mv $HOME/Downloads/info.txt $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json # save bbench output
 	fi
-
+	restore_governor
 	exit 0
 }
 
@@ -165,16 +215,25 @@ elif [[ `check_core_config $CORE_CONFIG` ]]; then
 	echo "error: invalid core configuration $CORE_CONFIG"
 	give_usage
 fi
+
+ping -c 1 google.com &> /dev/null
+if [ $? -eq 0 ]; then
+	echo "error: internet connection detected, please disconnect"
+	give_usage
+fi
+
+
 if [[ $OUTPUT_FILE == "test" ]]; then
 	echo "performing a dry run..."
+	
 fi
 
 trap 'sigint' SIGINT 
 
 # Preprocessing 
 core_config_flag=$(get_config $CORE_CONFIG)
-SUFFIX=$core_config_flag
-
+ID=`mktemp -u XXXXXXXX`
+SUFFIX="$CORE_CONFIG-$ID"
 
 #perf options:[freq (Hz)] [timestamp] [per-thread] [addresses]
 #perf record -F 99 --call-graph dwarf -T -s -d -- sudo -u odroid firefox "$BBENCH_DIR/index.html" &
@@ -182,13 +241,22 @@ SUFFIX=$core_config_flag
 # start up the southhampton monitor
 # options are: [outputfile] [period (us)] [use-pmcs] [performance counters...]
 echo "starting southhampton monitor"
-echo "$STHHAMP_DIR/datalogging_code/cdatalog $MONOUT_DIR/$OUTPUT_FILE-$SUFFIX 10000 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &"
+echo "$STHHAMP_DIR/datalogging_code/cdatalog $MONOUT_DIR/$OUTPUT_FILE-$SUFFIX $PROFILE_SAMPLE_RATE_US 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &"
+
+echo ""
+
+echo "starting up firefox with cores: $core_config_flag..."
+echo "sudo -u odroid taskset -c $core_config_flag firefox $BBENCH_DIR/index.html &"
+
+echo ""
+
 if ! [[ $OUTPUT_FILE == "test" ]]; then
-	"$STHHAMP_DIR/datalogging_code/cdatalog" "$MONOUT_DIR/$OUTPUT_FILE-$SUFFIX" 10000 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &
+	echo "setting governor..."
+	set_governor # check that it is in performance mode
+
+	"$STHHAMP_DIR/datalogging_code/cdatalog" "$MONOUT_DIR/$OUTPUT_FILE-$SUFFIX" $PROFILE_SAMPLE_RATE_US 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &
 
 	# start up firefox in the background
-	echo "starting up firefox with cores: $core_config_flag..."
-	echo "sudo -u odroid taskset -c $core_config_flag firefox $BBENCH_DIR/index.html &"
 	sudo -u odroid taskset -c $core_config_flag firefox "$BBENCH_DIR/index.html" &
 
 	wait
@@ -198,5 +266,5 @@ if ! [[ $OUTPUT_FILE == "test" ]]; then
 	else 
 		mv $HOME/Downloads/info.txt $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json # save bbench output
 	fi
+	restore_governor
 fi
-
