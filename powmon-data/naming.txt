@@ -1,0 +1,5 @@
+outputs are labelled as follows:
+
+[# iterations]-[# Hz of powmon]-[core config]-[unique ID]
+
+Example: 5-5-2l-2b-S3w290gl
