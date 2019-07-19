@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e # stop on errors
+#set -e # stop on errors
 
 HOME="/home/odroid"
 CURR_DIR="/home/odroid/data-collector"
@@ -197,6 +197,7 @@ sigint() {
 	if ! [ -f $HOME/Downloads/info.txt ]; then
 		echo "error: bbench did not write out a json file"
 	else 
+		echo "mv $HOME/Downloads/info.txt $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json"
 		mv $HOME/Downloads/info.txt $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json # save bbench output
 	fi
 	restore_governor
@@ -268,6 +269,7 @@ if ! [[ $OUTPUT_FILE == "test" ]]; then
 	if ! [ -f $HOME/Downloads/info.txt ]; then
 		echo "error: bbench did not write out a json file"
 	else 
+		echo "mv $HOME/Downloads/info.txt $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json"
 		mv $HOME/Downloads/info.txt $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json # save bbench output
 	fi
 	restore_governor
