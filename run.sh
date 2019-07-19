@@ -1,4 +1,7 @@
 #!/bin/bash
+
+set -e # stop on errors
+
 HOME="/home/odroid"
 CURR_DIR="/home/odroid/data-collector"
 BBENCH_DIR="/home/odroid/bbench-3.0"
@@ -20,6 +23,7 @@ PROFILE_SAMPLE_RATE_US=200000
 PROG_NAME=$0
 CORE_CONFIG=$1
 OUTPUT_FILE=$2
+
 
 give_usage() {
 	echo "usage: sudo $PROG_NAME [core-config:{x}l-{y}b] [output-filename]" >&2
@@ -200,6 +204,9 @@ sigint() {
 	exit 0
 }
 
+
+trap 'sigint' SIGINT 
+
 # Startup checks
 if [ "$EUID" -ne 0 ]; then
 	echo "error: sudo privileges needed by this script"
@@ -227,8 +234,6 @@ if [[ $OUTPUT_FILE == "test" ]]; then
 	echo "performing a dry run..."
 	
 fi
-
-trap 'sigint' SIGINT 
 
 # Preprocessing 
 core_config_flag=$(get_config $CORE_CONFIG)
