@@ -11,14 +11,13 @@ MONOUT_DIR="$CURR_DIR/powmon-data"
 JSON_DIR="$CURR_DIR/json-data"
 SUFFIX="all"
 
-
 AVAIL_GOVS="/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors"
 BIG_CPU_GOV="/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"
 LIL_CPU_GOV="/sys/devices/system/cpu/cpu7/cpufreq/scaling_governor"
 OLD_BIG_CPU_GOV=""
 OLD_LIL_CPU_GOV=""
 
-PROFILE_SAMPLE_RATE_US=200000
+PROFILE_SAMPLE_RATE_US=100000 #10Hz
 
 PROG_NAME=$0
 CORE_CONFIG=$1
