@@ -22,10 +22,14 @@ PROFILE_SAMPLE_RATE_US=100000 #10Hz
 PROG_NAME=$0
 CORE_CONFIG=$1
 OUTPUT_FILE=$2
+GOV_STR=$3
 
 
 give_usage() {
-	echo "usage: sudo $PROG_NAME [core-config:{x}l-{y}b] [output-filename]" >&2
+	echo -e \
+"usage: sudo $PROG_NAME\t[core-config:{x}l-{y}b]\n\
+\t\t\t[output-filename]\n\
+\t\t\t[governors: pi,ip,pp,ii]" >&2
 	exit
 }
 
@@ -153,6 +157,27 @@ set_governor() {
 		echo "error: no performance governor available"
 		exit 1
 	fi
+
+	NEW_BIG_CPU_GOV="performance"
+	NEW_LIL_CPU_GOV="performance"
+
+	if [[ "$1" == "ip" ]]; then
+		NEW_BIG_CPU_GOV="interactive"
+		NEW_LIL_CPU_GOV="performance"
+	elif [[ "$1" == "pi" ]]; then
+		NEW_BIG_CPU_GOV="performance"
+		NEW_LIL_CPU_GOV="interactive"
+	elif [[ "$1" == "ii" ]]; then
+		NEW_BIG_CPU_GOV="interactive"
+		NEW_LIL_CPU_GOV="interactive"
+	elif [[ "$1" == "pp" ]]; then
+		NEW_BIG_CPU_GOV="performance"
+		NEW_LIL_CPU_GOV="performance"
+	else
+		echo "error: invalid governor string"
+		exit 1
+	fi
+
 	OLD_BIG_CPU_GOV=`cat $BIG_CPU_GOV` # save the old state
 	OLD_LIL_CPU_GOV=`cat $LIL_CPU_GOV`
 
@@ -163,11 +188,11 @@ set_governor() {
 		echo "error: unable to save little cluster governor"
 	fi
 
-	echo "performance" > "$BIG_CPU_GOV"
-	echo "performance" > "$LIL_CPU_GOV"
+	echo $NEW_BIG_CPU_GOV > "$BIG_CPU_GOV"
+	echo $NEW_LIL_CPU_GOV > "$LIL_CPU_GOV"
 
 	# governor did not change...
-	if ! [[ `cat $BIG_CPU_GOV | grep performance` ]] || ! [[ `cat $LIL_CPU_GOV | grep performance` ]]; then
+	if ! [[ `cat $BIG_CPU_GOV | grep $NEW_BIG_CPU_GOV` ]] || ! [[ `cat $LIL_CPU_GOV | grep $NEW_LIL_CPU_GOV` ]]; then
 		echo "error: unable to change governor"
 		exit 1
 	fi
@@ -179,6 +204,7 @@ restore_governor() {
 	elif [ -z $OLD_LIL_CPU_GOV ] ; then
 		return
 	fi
+	echo "restoring governors to $OLD_BIG_CPU_GOV and $OLD_LIL_CPU_GOV"
 
 	echo $OLD_BIG_CPU_GOV > $BIG_CPU_GOV
 	echo $OLD_LIL_CPU_GOV > $LIL_CPU_GOV
@@ -215,7 +241,7 @@ elif ! [[ `lsmod | grep perf` ]]; then
 	echo "error: perf kernel module not found."
 	echo "please run sudo insmod -f $STHHAMP_DIR/datalogging_code/perf.ko"
 	give_usage
-elif [ $# -lt 2 ]; then
+elif [ $# -lt 3 ]; then
 	echo "error: not enough args"
 	give_usage
 elif [[ `check_core_config $CORE_CONFIG` ]]; then
@@ -232,13 +258,12 @@ fi
 
 if [[ $OUTPUT_FILE == "test" ]]; then
 	echo "performing a dry run..."
-	
 fi
 
 # Preprocessing 
 core_config_flag=$(get_config $CORE_CONFIG)
 ID=`mktemp -u XXXXXXXX`
-SUFFIX="$CORE_CONFIG-$ID"
+SUFFIX="$CORE_CONFIG-$GOV_STR-$ID"
 
 #perf options:[freq (Hz)] [timestamp] [per-thread] [addresses]
 #perf record -F 99 --call-graph dwarf -T -s -d -- sudo -u odroid firefox "$BBENCH_DIR/index.html" &
@@ -256,8 +281,8 @@ echo "sudo -u odroid taskset -c $core_config_flag firefox $BBENCH_DIR/index.html
 echo ""
 
 if ! [[ $OUTPUT_FILE == "test" ]]; then
-	echo "setting governor..."
-	set_governor # check that it is in performance mode
+	echo "setting governor with str $GOV_STR..."
+	set_governor $GOV_STR # check that it is in correct mode
 
 	"$STHHAMP_DIR/datalogging_code/cdatalog" "$MONOUT_DIR/$OUTPUT_FILE-$SUFFIX" $PROFILE_SAMPLE_RATE_US 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &
 
