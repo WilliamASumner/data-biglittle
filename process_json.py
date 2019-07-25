@@ -23,8 +23,9 @@ def main():
     if len(sys.argv) < 2:
         print("error: need a filename")
         return
-    d = read_data(sys.argv[1])
-    print(d)
+    data = read_data(sys.argv[1])
+    print(data)
+    return data
 
 if __name__ == "__main__": # run the test to see if it works
-    main()
+    data= main()
