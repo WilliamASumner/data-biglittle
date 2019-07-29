@@ -66,7 +66,7 @@ for i in {1..3}; do # for each iteration
 		for config in ${iterconfig[@]}; do
 			echo "running ./run.sh $config $FILEPREFIX $gov"
 			./run.sh $config $FILEPREFIX $gov
-			RET_VAL=$?
+			RETVAL=$?
 			if [[ "$RETVAL" == "1" ]]; then # run.sh didn't like something...
 				echo "run.sh exited with an error, see above output"
 				exit
