@@ -17,7 +17,14 @@ LIL_CPU_GOV="/sys/devices/system/cpu/cpu7/cpufreq/scaling_governor"
 OLD_BIG_CPU_GOV=""
 OLD_LIL_CPU_GOV=""
 
-PROFILE_SAMPLE_RATE_US=100000 #10Hz
+DUMMY_SERVER_FILE="http://was42@tucunare.cs.pitt.edu:8080/index.html"
+
+INTERNET_WAS_OFF="yes"
+GDM_WAS_OFF="yes" 
+
+PROFILE_SAMPLE_RATE_US=100000 #10Hz for Powmon
+
+COMMAND_TO_RUN="python sel.py" # firefox $BBENCH_DIR/index.html 
 
 PROG_NAME=$0
 CORE_CONFIG=$1
@@ -215,21 +222,32 @@ sigint() {
 	echo "killing cdatalog"
 	kill `pgrep cdatalog`
 
-	echo "killing firefox"
-	if [[ `pgrep firefox` ]]; then
-		kill `pgrep firefox`
+	#echo "killing firefox"
+	#if [[ `pgrep firefox` ]]; then
+	#	kill `pgrep firefox`
+	#fi
+
+	if ! [ -f $CURR_DIR/output.json ]; then
+		echo "error: '$COMMAND_TO_RUN' did not create a file called 'output.json'"
+	else 
+		echo "mv $CURR_DIR/output.json $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json"
+		mv $CURR_DIR/output.json $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json
+	fi
+	echo "restoring governor..."
+	restore_governor
+
+	if [[ "$INTERNET_WAS_OFF" == "no" ]]; then # restart internet if it was disabled by this script
+		echo "ifconfig eth0 up"
+		ifconfig eth0 up
 	fi
 
-	if ! [ -f $HOME/Downloads/info.txt ]; then
-		echo "error: bbench did not write out a json file"
-	else 
-		echo "mv $HOME/Downloads/info.txt $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json"
-		mv $HOME/Downloads/info.txt $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json # save bbench output
+	if [[ "$GDM_WAS_OFF" == "no" ]]; then # restart gdm if need be
+		echo "service gdm3 start"
+		service gdm3 start
 	fi
-	restore_governor
+
 	exit 0
 }
-
 
 trap 'sigint' SIGINT 
 
@@ -249,12 +267,20 @@ elif [[ `check_core_config $CORE_CONFIG` ]]; then
 	give_usage
 fi
 
-ping -c 1 google.com &> /dev/null
-if [ $? -eq 0 ]; then
-	echo "error: internet connection detected, please disconnect"
+wget -q -O /dev/null $DUMMY_SERVER_FILE # try to load a test file from the server, no info and no file created
+RET_VAL=$?
+if ! [ $RET_VAL -eq 0 ]; then
+	echo "error: unable to connect to server, error returned from wget was $RET_VAL"
+	echo "trying using 'man wget' to find out more information"
+	#INTERNET_WAS_OFF="no"
+	#ifconfig eth0 down # old way was to disable internet and load from disk
 	give_usage
 fi
 
+if [[ `service gdm3 status | grep running` ]]; then # gdm is being run, stop it
+	GDM_WAS_OFF="no"
+	service gdm3 stop
+fi
 
 if [[ $OUTPUT_FILE == "test" ]]; then
 	echo "performing a dry run..."
@@ -270,13 +296,11 @@ SUFFIX="$CORE_CONFIG-$GOV_STR-$ID"
 
 # start up the southhampton monitor
 # options are: [outputfile] [period (us)] [use-pmcs] [performance counters...]
-echo "starting southhampton monitor"
-echo "$STHHAMP_DIR/datalogging_code/cdatalog $MONOUT_DIR/$OUTPUT_FILE-$SUFFIX $PROFILE_SAMPLE_RATE_US 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &"
 
 echo ""
 
-echo "starting up firefox with cores: $core_config_flag..."
-echo "sudo -u odroid taskset -c $core_config_flag firefox $BBENCH_DIR/index.html &"
+echo "starting up command with cores: $core_config_flag..."
+echo "sudo -u odroid taskset -c $core_config_flag $COMMAND_TO_RUN &"
 
 echo ""
 
@@ -286,16 +310,48 @@ if ! [[ $OUTPUT_FILE == "test" ]]; then
 
 	"$STHHAMP_DIR/datalogging_code/cdatalog" "$MONOUT_DIR/$OUTPUT_FILE-$SUFFIX" $PROFILE_SAMPLE_RATE_US 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &
 
-	# start up firefox in the background
-	sudo -u odroid taskset -c $core_config_flag firefox "$BBENCH_DIR/index.html" &
+	# start up command in the background
+	sudo -u odroid taskset -c $core_config_flag $COMMAND_TO_RUN &
 
-	wait
+	wait # wait for all children to finish
 
-	if ! [ -f $HOME/Downloads/info.txt ]; then
-		echo "error: bbench did not write out a json file"
+	if ! [ -f $CURR_DIR/output.json ]; then
+		echo "error: '$COMMAND_TO_RUN' did not write out a json file"
 	else 
-		echo "mv $HOME/Downloads/info.txt $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json"
-		mv $HOME/Downloads/info.txt $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json # save bbench output
+		echo "mv $CURR_DIR/output.json $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json"
+		mv $CURR_DIR/output.json $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json # save command output
 	fi
 	restore_governor
+
+	if [[ "$INTERNET_WAS_OFF" == "no" ]]; then # restart internet if it was disabled by this script
+		echo "ifconfig eth0 up"
+		ifconfig eth0 up
+	fi
+	if [[ "$GDM_WAS_OFF" == "no" ]]; then # restart gdm if need be
+		echo "service gdm3 start"
+		service gdm3 start
+	fi
+else 
+	echo "setting governor with str $GOV_STR..."
+	set_governor $GOV_STR
+
+	echo "starting southhampton monitor"
+	echo "$STHHAMP_DIR/datalogging_code/cdatalog $MONOUT_DIR/$OUTPUT_FILE-$SUFFIX $PROFILE_SAMPLE_RATE_US 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &"
+
+	echo "starting command"
+	echo "sudo -u odroid taskset -c $core_config_flag $COMMAND_TO_RUN &"
+
+	echo "moving output file"
+	echo "mv $CURR_DIR/output.json $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json"
+
+	restore_governor
+
+	if [[ "$INTERNET_WAS_OFF" == "no" ]]; then # restart internet if it was disabled by this script
+		echo "ifconfig eth0 up"
+		#ifconfig eth0 up
+	fi
+	if [[ "$GDM_WAS_OFF" == "no" ]]; then # restart gdm if need be
+		echo "service gdm3 start"
+		service gdm3 start
+	fi
 fi
