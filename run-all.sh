@@ -48,11 +48,12 @@ gen_itergovernor() { # generate a permutation of the governors
 }
 
 #startup checks
-if [ -z "$FILEPREFIX" ]; then # if they forget to use a output prefix... 
+if [ -z "$FILEPREFIX" ]; then # if they forget to use a prefix... 
 	FILEPREFIX="output" # punish them with this vague one
+	echo "using prefix output" # warn them of their mistake
 fi
 
-for i in {1..1}; do # for each iteration
+for i in {1..3}; do # for each iteration
 	echo "iteration $i"
 	gen_itergovernor
 
@@ -60,9 +61,9 @@ for i in {1..1}; do # for each iteration
 	# but the idea behind looping through various configs 
 	# in the inner loop is to possiblity that caching will help a config
 	# since it will not be run consecutively 
-	for gov in "pp"; do #${itergovernor[@]}; do  # for each governor, configs could be looped through first,
+	for gov in ${itergovernor[@]}; do  # for each governor, configs could be looped through first,
 		gen_iterconfig
-		for config in "4l-0b"; do #${iterconfig[@]}; do
+		for config in ${iterconfig[@]}; do
 			echo "running ./run.sh $config $FILEPREFIX $gov"
 			./run.sh $config $FILEPREFIX $gov
 			RET_VAL=$?
