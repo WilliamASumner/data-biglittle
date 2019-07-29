@@ -104,5 +104,5 @@ def runTest(iters,addresses):
 
 
 if __name__ == '__main__':
-	iterations = 1
+	iterations = 1 # just do one iteration for now, we'll do more in the main shell script
 	saveResults(iterations,sites,runTest(iterations,addressArray))
