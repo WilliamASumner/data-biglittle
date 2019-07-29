@@ -3,3 +3,4 @@ test.sh
 __pycache__
 .*.swp
 powmon-data/.old-data
+*.log
