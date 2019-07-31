@@ -37,7 +37,7 @@ give_usage() {
 "usage: sudo $PROG_NAME\t[core-config:{x}l-{y}b]\n\
 \t\t\t[output-filename]\n\
 \t\t\t[governors: pi,ip,pp,ii]" >&2
-	exit
+	exit 1
 }
 
 array_contains () {
@@ -219,8 +219,16 @@ restore_governor() {
 
 sigint() {
 	echo "signal INT caught, cleaning up"
-	echo "killing cdatalog"
+	echo "killing cdatalog..."
 	kill `pgrep cdatalog`
+	echo "killed"
+
+	echo "killing python and selenium..."
+	kill `pgrep python` # kill all the processes involved with selenium
+	kill `pgrep chromedriver` #TODO find a simpler/cleaner way to do this
+	kill `pgrep chromium-browse`
+	kill `pgrep Xvfb`
+	echo "killed"
 
 	#echo "killing firefox"
 	#if [[ `pgrep firefox` ]]; then
@@ -236,17 +244,16 @@ sigint() {
 	echo "restoring governor..."
 	restore_governor
 
-	if [[ "$INTERNET_WAS_OFF" == "no" ]]; then # restart internet if it was disabled by this script
-		echo "ifconfig eth0 up"
-		ifconfig eth0 up
-	fi
+	#if [[ "$INTERNET_WAS_OFF" == "no" ]]; then # restart internet if it was disabled by this script
+	#	echo "ifconfig eth0 up"
+	#	ifconfig eth0 up
+	#fi
 
-	if [[ "$GDM_WAS_OFF" == "no" ]]; then # restart gdm if need be
-		echo "service gdm3 start"
-		service gdm3 start
-	fi
-
-	exit 0
+	#if [[ "$GDM_WAS_OFF" == "no" ]]; then # restart gdm if need be
+	#	echo "service gdm3 start"
+	#	service gdm3 start
+	#fi
+	exit 2 # want to return that we hit a ctrl-c
 }
 
 trap 'sigint' SIGINT 
@@ -279,7 +286,9 @@ fi
 
 if [[ `service gdm3 status | grep running` ]]; then # gdm is being run, stop it
 	GDM_WAS_OFF="no"
-	service gdm3 stop
+	#service gdm3 stop
+	echo "please disable gdm"
+	give_usage
 fi
 
 if [[ $OUTPUT_FILE == "test" ]]; then
@@ -308,13 +317,13 @@ if ! [[ $OUTPUT_FILE == "test" ]]; then
 	echo "setting governor with str $GOV_STR..."
 	set_governor $GOV_STR # check that it is in correct mode
 
-	"$STHHAMP_DIR/datalogging_code/cdatalog" "$MONOUT_DIR/$OUTPUT_FILE-$SUFFIX" $PROFILE_SAMPLE_RATE_US 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &
+	taskset -c 0 "$STHHAMP_DIR/datalogging_code/cdatalog" "$MONOUT_DIR/$OUTPUT_FILE-$SUFFIX" $PROFILE_SAMPLE_RATE_US 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &
 
 	# start up command in the background
 	sudo -u odroid taskset -c $core_config_flag $COMMAND_TO_RUN &
 
-	wait # wait for all children to finish
-
+	wait $! # wait for previous command to finish
+	
 	if ! [ -f $CURR_DIR/output.json ]; then
 		echo "error: '$COMMAND_TO_RUN' did not write out a json file"
 	else 
@@ -336,7 +345,7 @@ else
 	set_governor $GOV_STR
 
 	echo "starting southhampton monitor"
-	echo "$STHHAMP_DIR/datalogging_code/cdatalog $MONOUT_DIR/$OUTPUT_FILE-$SUFFIX $PROFILE_SAMPLE_RATE_US 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &"
+	echo "taskset -c 0 $STHHAMP_DIR/datalogging_code/cdatalog $MONOUT_DIR/$OUTPUT_FILE-$SUFFIX $PROFILE_SAMPLE_RATE_US 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &"
 
 	echo "starting command"
 	echo "sudo -u odroid taskset -c $core_config_flag $COMMAND_TO_RUN &"
