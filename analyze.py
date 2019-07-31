@@ -32,12 +32,12 @@ def main():
     pmcData=pmc.read_data(sys.argv[1]) # ndarray
     jsonData=pj.read_data(sys.argv[2]) # dict of ndarrays and other values
 
-    starTimestamp = np.amin([jsonData["start_timestamp"],
+    startTimestamp = np.amin([jsonData["start_timestamp"],
                               np.amin(pmcData["Time_Milliseconds"])])
     endTimestamp = jsonData["end_timestamp"]
 
-    jsonData["timestamps"] -= starTimestamp.astype(np.int64)
-    pmcData["Time_Milliseconds"] -= starTimestamp # subtract both to start at the same time
+    jsonData["timestamps"] -= startTimestamp.astype(np.int64)
+    pmcData["Time_Milliseconds"] -= startTimestamp # subtract both to start at the same time
 
     numSites = len(jsonData["sites"])
     iterations = jsonData["iterations"]
@@ -99,11 +99,11 @@ def main():
 
 
 
-    # looking for two tables
-    # table 1
+    # creating two graphs
+    # graph 1
     # page, config, load time, energy
 
-    #table 2
+    # graph 2
     # config, avg counter a15, avg counter a7, load time, energy
 
     with open(sys.argv[1] + "-ml-output.txt","w") as mlOutFile:
