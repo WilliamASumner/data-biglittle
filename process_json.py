@@ -19,6 +19,11 @@ def read_data(filename):
     data_to_numpy(json_dict)
     return json_dict
 
+def read_selenium_data(filename):
+    with open(filename) as json_file:
+        json_data = json.load(json_file)
+        return json_data
+
 def main():
     if len(sys.argv) < 2:
         print("error: need a filename")
