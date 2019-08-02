@@ -5,3 +5,4 @@ __pycache__
 powmon-data/.old-data
 *.log
 *.pyc
+plots/
