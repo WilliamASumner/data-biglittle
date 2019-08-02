@@ -12,14 +12,14 @@ import process_json as pj
 
 def index_timestamp(timestamp,timestampArr):
     count = 0
-    while(timestampArr[count] <= timestamp):
+    while(count < len(timestampArr) and timestampArr[count] < timestamp):
         count +=1
     return count
 
 def timestamp_interval(start,end,timestampArr):
     start = index_timestamp(start,timestampArr)
     end = index_timestamp(end,timestampArr)
-    return (start,end)
+    return (start,end+1) # plus 1 for python indexing
 
 def main():
     if len(sys.argv) < 3:
