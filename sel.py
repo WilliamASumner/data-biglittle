@@ -81,7 +81,7 @@ class PageLoadTimer:
 
 def saveResults(iters,sites,timestamps):
 	with open('output.json','w') as jsonFile:
-		info = {"iterations":iters, "sites":sites, "timestamps":timestamps}
+		info = {"iterations":iters, "sites":sites, "timestamps":timestamps[0]}
 		content = json.dumps(info)
 		jsonFile.write(content)
 
