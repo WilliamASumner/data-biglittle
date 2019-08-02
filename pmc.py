@@ -31,7 +31,7 @@ def read_data(filename):
     return data
 
 def calc_energy(powArr,timeArr):
-    return integrate.simps(powArr,timeArr/1000) # divide to get J instead of mJ
+    return integrate.simps(powArr,timeArr) #  calculates in mJ (W*ms)
 
 def main():
     if (len(sys.argv) != 2):
