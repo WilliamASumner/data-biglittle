@@ -5,11 +5,49 @@
 # Written by Will Sumner
 import numpy as np
 import matplotlib.pyplot as plt
-import sys
+import sys,glob
+from copy import deepcopy
 
 import pmc
 import process_json as pj
 
+
+# Global values
+badConfigs = [(0,0),(1,4),(2,4),(1,2),(2,2),(1,1),(2,1),(1,0),(2,0),(0,2)] # configs we will skip
+badLittle  = [3] # configs we will skip
+badBig     = [3] # configs we will skip
+coreConfigs = []
+for little in range(5): # 0 - 4
+    for big in range(5):
+        if ((little,big) in badConfigs) or (little in badLittle) or (big in badBig):
+            continue
+        coreConfigs.append(str(little)+"l-"+str(big)+"b")
+
+
+govConfigs = ["ii"] #["ip","pi","pp","ii"]
+
+loadTypes           = ['navigationStart', 'requestStart', 'domLoading', 'domComplete', 'loadEventEnd' ]
+loadTypesEnglish    = ['Setup Connection','Download Page','Process Page','Run Dynamic Content']
+loadTypesEnglishMap = dict(zip(loadTypes[0:4],loadTypesEnglish))
+
+sites = [ 'amazon',     'bbc',  'cnn',
+          'craigslist', 'ebay', 'espn',
+          'google',     'msn',  'slashdot',
+          'twitter',    'youtube']
+
+powmon_sample_period = 100.0 # sample period is 100ms
+
+#loadTypes = ['navigationStart', 'fetchStart', 'domainLookupStart',
+#                      'domainLookupEnd', 'connectStart', 'connectEnd',
+#                      #'secureConnectionStart',
+#                      'requestStart',
+#                      'responseStart', 'responseEnd', 'domLoading',
+#                      'domInteractive', 'domContentLoadedEventStart',
+#                      'domContentLoadedEventEnd', 'domComplete',
+#                      'loadEventStart', 'loadEventEnd' ]
+
+
+# Functions
 def index_timestamp(timestamp,timestampArr):
     count = 0
     while(count < len(timestampArr) and timestampArr[count] < timestamp):
@@ -21,104 +59,99 @@ def timestamp_interval(start,end,timestampArr):
     end = index_timestamp(end,timestampArr)
     return (start,end+1) # plus 1 for python indexing
 
-def main():
-    if len(sys.argv) < 3:
-        print("error: not enough arguments")
-        print("usage: " + sys.argv[0] + " pmc-datafile json-datafile")
-        return
-    pmcFile = sys.argv[1]
-    jsonFile = sys.argv[2]
+def analyzeData(iterations=10):
+    filePrefix = "selenium-redo-"
+    if len(sys.argv) > 1:
+        filePrefix = sys.argv[1]
+        if filePrefix[-1] != '-':
+            filePrefix += "-"
 
-    pmcData=pmc.read_data(sys.argv[1]) # ndarray
-    jsonData=pj.read_data(sys.argv[2]) # dict of ndarrays and other values
+    pmcDir = "powmon-data/"
+    jsonDir = "json-data/"
 
-    startTimestamp = np.amin([jsonData["start_timestamp"],
-                              np.amin(pmcData["Time_Milliseconds"])])
-    endTimestamp = jsonData["end_timestamp"]
+    pmcPrefix = pmcDir + filePrefix
+    jsonPrefix = jsonDir + filePrefix
 
-    jsonData["timestamps"] -= startTimestamp.astype(np.int64)
-    pmcData["Time_Milliseconds"] -= startTimestamp # subtract both to start at the same time
+    # Layout for the data:
+    # websiteData[coreConfig][govConfig][siteName][loadTimeType][iteration][energy|loadtime] -> npArray of values
+    baseContainer = {'energy':np.zeros((iterations,)), 'loadtime': np.zeros((iterations,))}
+    byLoadType =    dict(zip(loadTypes,[deepcopy(baseContainer) for loadType in loadTypes]))
+    bySite =        dict(zip(sites,[deepcopy(byLoadType) for site in sites]))
+    byGov =         dict(zip(govConfigs,[deepcopy(bySite) for config in govConfigs]))
+    websiteData =   dict(zip(coreConfigs,[deepcopy(byGov) for config in coreConfigs]))
 
-    numSites = len(jsonData["sites"])
-    iterations = jsonData["iterations"]
-    siteTimestamps = dict(zip(jsonData["sites"],
-        [np.zeros((2,iterations)) for x in range(numSites)]))
+    knownCoreConfigs = []
 
-    # get timestamp intervals for each page
-    count = 0
-    for i in range(iterations):
-        for site in jsonData['sites']: # for each site
-            siteTimestamps[site][0][i] = jsonData["timestamps"][count]
-            siteTimestamps[site][1][i] = jsonData["timestamps"][count+1]
-            count += 1
+    for coreConfig in coreConfigs: # load/organize the data
+        pmcFile = pmcPrefix + coreConfig + "-"
+        jsonFilePrefix = jsonPrefix + coreConfig + "-"
+        for govConfig in govConfigs:
+            pmcFilePrefix = pmcPrefix + coreConfig + "-" +  govConfig + "-"
+            jsonFilePrefix = jsonPrefix + coreConfig + "-" + govConfig + "-"
 
-    siteTimestamps[site][1][i] = endTimestamp
+            pmcFiles = glob.glob(pmcFilePrefix+"*") # just use pmc files to get id
+            ids = []
+            for index,f in enumerate(pmcFiles):
+                ids.append(pmcFiles[index].split("-")[-1]) # id is last field
+            if len(ids) != 0: # we found a file!
+                if not coreConfig in knownCoreConfigs:
+                    knownCoreConfigs.append(coreConfig) # track which core configs we've found
+            for fileIndex,fileID in enumerate(ids): # for each pair of data files
+                iteration = fileIndex
+                if (iteration >= iterations):
+                    print("skipping additional iterations...")
+                    break # stop if we can't hold anymore data, TODO allow for dynamic number of files
 
-    loadPMCAvgs = dict(zip(jsonData["sites"],[[[] for y in range(iterations)] for x in range(numSites)]))
-    pmcColumns = pmcData.dtype.names[pmcData.dtype.names.index("Power_GPU")+1:
-                                 pmcData.dtype.names.index("Average_Utilisation")]
+                pmcFile = pmcFiles[fileIndex]
+                print ("on file " + pmcFile)
+                jsonFile = jsonFilePrefix + fileID + ".json" # look at same id'd json file
+                print("with file " + jsonFile)
 
-    # diff the columns
-    for column in pmcColumns:
-        diffs =  np.diff(pmcData[column])
-        #diffs /= 1e6
+                pmcData = pmc.read_data(pmcFile) # ndarray
+                jsonData = pj.read_selenium_data(jsonFile) # dict of mixed types
 
-        pmcData[column][:diffs.shape[0]] = diffs
-        pmcData[column][0] = pmcData[column][1] # pad first entry with next val
+                energyThreshold = 0.01
+                for site in sites:
+                    for index,loadType in enumerate(loadTypes):
+                        if (index < len(loadTypes) - 1): # don't calculate pow for the extra 'interval'
+                            loadtime = jsonData['timestamps'][site][0][loadTypes[index+1]][0] - jsonData['timestamps'][site][0][loadType][0]
+                            websiteData[coreConfig][govConfig][site][loadType]['loadtime'][iteration] = loadtime
 
-        # correct negative entries (due to overflow)
-        pmcData[column][pmcData[column] < 0] += (2**32 + 1)
+                            start,end = timestamp_interval(int(jsonData['timestamps'][site][0][loadType][0]),
+                                    int(jsonData['timestamps'][site][0][loadTypes[index+1]][0]),
+                                    pmcData['Time_Milliseconds'])
+                            if (start == end-1 and end < len(pmcData['Power_A7'])): # time interval is lower than our powmon recorded, estimate
+                                scaleFactor = loadtime/powmon_sample_period
+                                minPower = min(pmcData['Power_A7'][start-1],pmcData['Power_A7'][end])
+                                maxPower = max(pmcData['Power_A7'][start-1],pmcData['Power_A7'][end])
+                                energyLittle = (minPower + 0.5*(maxPower-minPower)) * scaleFactor * (pmcData['Time_Milliseconds'][end] - pmcData['Time_Milliseconds'][start])
+                                minPower = min(pmcData['Power_A15'][start-1],pmcData['Power_A15'][end])
+                                maxPower = max(pmcData['Power_A15'][start-1],pmcData['Power_A15'][end])
+                                energyBig = (minPower + 0.5*(maxPower-minPower)) * scaleFactor * (pmcData['Time_Milliseconds'][end] - pmcData['Time_Milliseconds'][start])
+                                energy = energyBig + energyLittle
+                                if energy <= energyThreshold:
+                                    print("0 energy calculated from (" + str(minPower) + "0.5*(" + str(maxPower) + "-" + str(minPower) + ")) * " + str(scaleFactor))
+                                    print("scaleFactor = " + str(loadtime) + "/" + str(powmon_sample_period))
+                            elif start == end -1: # edge case where data is not available
+                                print("edge case found with loadType" + loadType)
+                                energy = -100
+                            else:
+                                energy =  pmc.calc_energy(pmcData['Power_A7'][start:end], pmcData['Time_Milliseconds'][start:end])
+                                energy += pmc.calc_energy(pmcData['Power_A15'][start:end], pmcData['Time_Milliseconds'][start:end])
+                                if energy <= energyThreshold:
+                                    print("0 energy calculated from regular integration")
+                                    print(start)
+                                    print(end)
+                                    print(pmcData['Power_A7'][start:end])
+                                    print(pmcData['Power_A15'][start:end])
+                                    print(pmcData['Time_Milliseconds'][start:end])
 
-    # compile stats for each site
-    for i in range(iterations):
-        for site in jsonData['sites']:
-            start,end = timestamp_interval(siteTimestamps[site][0][i],
-                                           siteTimestamps[site][1][i],
-                                           pmcData["Time_Milliseconds"])
-            #print("(start,end) : ("+str(start) + "," + str(end) + ")")
-            energy = pmc.calc_energy(pmcData["Power_A7"][start:end],
-                                 pmcData["Time_Milliseconds"][start:end])
-            energy += pmc.calc_energy(pmcData["Power_A15"][start:end],
-                                 pmcData["Time_Milliseconds"][start:end])
-            loadPMCAvgs[site][i].append(energy)
-            for column in pmcColumns:
-                dataSlice = pmcData[column][start:end]
-                loadPMCAvgs[site][i] += (np.mean(dataSlice))
-
-    # average across iterations now
-    siteAvgs = dict(zip(jsonData["sites"],[[[] for y in range(iterations)] for x in range(numSites)]))
-    for site in jsonData['sites']:
-        siteAvgs[site] = np.mean([loadPMCAvgs[site][i] for i in range(iterations)],axis=0)
-
-    features = ["avg","med","min","max","stddev"]
-
-    mlDataHeaders = ["Core_Config","Load_Time(ms)","Energy(J)"]
-    mlDataHeaders += [column + "(count)-" + features[i]
-                          for x in range(len(features))
-                          for column in pmcColumns]
-
-
-
-    # creating two graphs
-    # graph 1
-    # page, config, load time, energy
-
-    # graph 2
-    # config, avg counter a15, avg counter a7, load time, energy
-
-    with open(sys.argv[1] + "-ml-output.txt","w") as mlOutFile:
-        for index,header in enumerate(mlDataHeaders): # write headers
-            if index:
-                mlOutFile.write("\t")
-            mlOutFile.write(header)
-        mlOutFile.write("\n")
-
-        for siteIndex,site in enumerate(jsonData['sites']): # write data
-            mlOutFile.write("1") #FIXME add core config
-            mlOutFile.write("\t" + str(jsonData["avg_times"][siteIndex]))
-            for ind,field in enumerate(mlDataHeaders[2:]):
-                mlOutFile.write("\t" + str(siteAvgs[site][ind]))
-            mlOutFile.write("\n")
+                            if (start != end): # if we didn't do an approximation
+                                websiteData[coreConfig][govConfig][site][loadType]['energy'][iteration] = energy
+                            else:
+                                websiteData[coreConfig][govConfig][site][loadType]['energy'][iteration] = \
+                                        energy*(loadtime/powmon_sample_period)
+    return (websiteData,knownCoreConfigs)
 
 if __name__ == "__main__":
-    main()
+    print(analyzeData(3))
