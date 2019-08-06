@@ -25,17 +25,17 @@ addressArray = [
 '''
 
 addressArray = [
-		'http://was42@tucunare.cs.pitt.edu:8080/amazon/www.amazon.com/',
-		'http://was42@tucunare.cs.pitt.edu:8080/bbc/www.bbc.co.uk/', 
-		'http://was42@tucunare.cs.pitt.edu:8080/cnn/www.cnn.com/', 
-		'http://was42@tucunare.cs.pitt.edu:8080/craigslist/newyork.craigslist.org/', 
-		'http://was42@tucunare.cs.pitt.edu:8080/ebay/www.ebay.com/', 
-		'http://was42@tucunare.cs.pitt.edu:8080/espn/espn.go.com/', 
-		'http://was42@tucunare.cs.pitt.edu:8080/google/www.google.com/', 
-		'http://was42@tucunare.cs.pitt.edu:8080/msn/www.msn.com/', 
-		'http://was42@tucunare.cs.pitt.edu:8080/slashdot/slashdot.org/', 
-		'http://was42@tucunare.cs.pitt.edu:8080/twitter/twitter.com/', 
-		'http://was42@tucunare.cs.pitt.edu:8080/youtube/www.youtube.com/']
+		'http://tucunare.cs.pitt.edu:8080/amazon/www.amazon.com/',
+		'http://tucunare.cs.pitt.edu:8080/bbc/www.bbc.co.uk/', 
+		'http://tucunare.cs.pitt.edu:8080/cnn/www.cnn.com/', 
+		'http://tucunare.cs.pitt.edu:8080/craigslist/newyork.craigslist.org/', 
+		'http://tucunare.cs.pitt.edu:8080/ebay/www.ebay.com/', 
+		'http://tucunare.cs.pitt.edu:8080/espn/espn.go.com/', 
+		'http://tucunare.cs.pitt.edu:8080/google/www.google.com/', 
+		'http://tucunare.cs.pitt.edu:8080/msn/www.msn.com/', 
+		'http://tucunare.cs.pitt.edu:8080/slashdot/slashdot.org/', 
+		'http://tucunare.cs.pitt.edu:8080/twitter/twitter.com/', 
+		'http://tucunare.cs.pitt.edu:8080/youtube/www.youtube.com/']
 
 sites = [
 	'amazon',
@@ -81,7 +81,7 @@ class PageLoadTimer:
 
 def saveResults(iters,sites,timestamps):
 	with open('output.json','w') as jsonFile:
-		info = {"iterations":iters, "sites":sites, "timestamps":timestamps[0]}
+		info = {"iterations":iters, "sites":sites, "timestamps":timestamps}
 		content = json.dumps(info)
 		jsonFile.write(content)
 
