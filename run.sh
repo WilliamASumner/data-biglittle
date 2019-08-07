@@ -22,7 +22,7 @@ DUMMY_SERVER_FILE="http://was42@tucunare.cs.pitt.edu:8080/index.html"
 INTERNET_WAS_OFF="yes"
 GDM_WAS_OFF="yes" 
 
-PROFILE_SAMPLE_RATE_US=100000 #10Hz for Powmon
+PROFILE_SAMPLE_PERIOD_US=100000 #10Hz for Powmon
 
 COMMAND_TO_RUN="python sel.py" # firefox $BBENCH_DIR/index.html 
 
@@ -274,24 +274,6 @@ elif [[ `check_core_config $CORE_CONFIG` ]]; then
 	give_usage
 fi
 
-NUM_RETRIES=20 # retry the connection a few times
-wget -q -O /dev/null $DUMMY_SERVER_FILE # try to load a test file from the server 
-RET_VAL=$?
-while ! [[ $NUM_RETRIES == "0" ]] && ! [[ $RET_VAL == "0" ]]; do # while we haven't exceeded our tries and have a bad return value
-	sleep 0.5 # wait for a little
-	echo "trying again to contact server..." 
-	NUM_RETRIES=$(( $NUM_RETRIES - 1 ))
-	wget -q -O /dev/null $DUMMY_SERVER_FILE # try to load a test file from the server 
-	RET_VAL=$?
-done
-
-if ! [ $RET_VAL -eq 0 ]; then
-	echo "error: unable to connect to server, error returned from wget was $RET_VAL"
-	echo "trying using 'man wget' to find out more information"
-	#INTERNET_WAS_OFF="no"
-	#ifconfig eth0 down # old way was to disable internet and load from disk
-	give_usage
-fi
 
 
 if [[ `service gdm3 status | grep running` ]]; then # gdm is being run, stop it
@@ -303,6 +285,26 @@ fi
 
 if [[ $OUTPUT_FILE == "test" ]]; then
 	echo "performing a dry run..."
+else 
+	echo "contacting server..."
+	NUM_RETRIES=20 # retry the connection a few times
+	wget -q -O /dev/null $DUMMY_SERVER_FILE # try to load a test file from the server 
+	RET_VAL=$?
+	while ! [[ $NUM_RETRIES == "0" ]] && ! [[ $RET_VAL == "0" ]]; do # while we haven't exceeded our tries and have a bad return value
+		sleep 0.5 # wait for a little
+		echo "trying again to contact server..." 
+		NUM_RETRIES=$(( $NUM_RETRIES - 1 ))
+		wget -q -O /dev/null $DUMMY_SERVER_FILE # try to load a test file from the server 
+		RET_VAL=$?
+	done
+	if ! [ $RET_VAL -eq 0 ]; then
+		echo "error: unable to connect to server, error returned from wget was $RET_VAL"
+		echo "trying using 'man wget' to find out more information"
+		#INTERNET_WAS_OFF="no"
+		#ifconfig eth0 down # old way was to disable internet and load from disk
+		give_usage
+	fi
+	echo "Connected to server!"
 fi
 
 # Preprocessing 
@@ -310,11 +312,6 @@ core_config_flag=$(get_config $CORE_CONFIG)
 ID=`mktemp -u XXXXXXXX`
 SUFFIX="$CORE_CONFIG-$GOV_STR-$ID"
 
-#perf options:[freq (Hz)] [timestamp] [per-thread] [addresses]
-#perf record -F 99 --call-graph dwarf -T -s -d -- sudo -u odroid firefox "$BBENCH_DIR/index.html" &
-
-# start up the southhampton monitor
-# options are: [outputfile] [period (us)] [use-pmcs] [performance counters...]
 
 echo ""
 
@@ -324,17 +321,20 @@ echo "sudo -u odroid taskset -c $core_config_flag $COMMAND_TO_RUN &"
 
 echo ""
 
-if ! [[ $OUTPUT_FILE == "test" ]]; then
+if ! [[ $OUTPUT_FILE == "test" ]]; then # IF NOT A TEST
 	echo "setting governor with str $GOV_STR..."
 	set_governor $GOV_STR # check that it is in correct mode
 
+
+    # start up the southhampton monitor
+    # options are: [outputfile] [period (us)] [use-pmcs] [performance counters...]
+
 	# assign the power monitor to core 0, which never turns off
-	taskset -c 0 "$STHHAMP_DIR/datalogging_code/cdatalog" "$MONOUT_DIR/$OUTPUT_FILE-$SUFFIX" $PROFILE_SAMPLE_RATE_US 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &
+	taskset -c 0 "$STHHAMP_DIR/datalogging_code/cdatalog" "$MONOUT_DIR/$OUTPUT_FILE-$SUFFIX" $PROFILE_SAMPLE_PERIOD_US 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &
 
-	# start up command in the background
-	sudo -u odroid taskset -c $core_config_flag $COMMAND_TO_RUN &
-
-	wait $! # wait for previous command to finish
+    # perf options: -F [freq (Hz)] -T [timestamp] -s [per-thread] -d [addresses]
+	# start up command
+	perf record -F 10 --call-graph fp -T -s -d -- sudo -u odroid taskset -c $core_config_flag $COMMAND_TO_RUN
 
 	if [[ `pgrep cdatalog` ]]; then # if the power monitor hasn't finished yet
 		echo "killing cdatalog..."
@@ -362,7 +362,7 @@ else
 	set_governor $GOV_STR
 
 	echo "starting southhampton monitor"
-	echo "taskset -c 0 $STHHAMP_DIR/datalogging_code/cdatalog $MONOUT_DIR/$OUTPUT_FILE-$SUFFIX $PROFILE_SAMPLE_RATE_US 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &"
+	echo "taskset -c 0 $STHHAMP_DIR/datalogging_code/cdatalog $MONOUT_DIR/$OUTPUT_FILE-$SUFFIX $PROFILE_SAMPLE_PERIOD_US 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &"
 
 	echo "starting command"
 	echo "sudo -u odroid taskset -c $core_config_flag $COMMAND_TO_RUN &"
