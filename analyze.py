@@ -59,12 +59,10 @@ def timestamp_interval(start,end,timestampArr):
     end = index_timestamp(end,timestampArr)
     return (start,end+1) # plus 1 for python indexing
 
-def analyzeData(iterations=10):
+def analyzeData(filePrefix = "selenium-redo-", iterations=10,verbose=False):
     filePrefix = "selenium-redo-"
-    if len(sys.argv) > 1:
-        filePrefix = sys.argv[1]
-        if filePrefix[-1] != '-':
-            filePrefix += "-"
+    if filePrefix[-1] != '-': # some tiny error checking
+        filePrefix += "-"
 
     pmcDir = "powmon-data/"
     jsonDir = "json-data/"
@@ -73,7 +71,7 @@ def analyzeData(iterations=10):
     jsonPrefix = jsonDir + filePrefix
 
     # Layout for the data:
-    # websiteData[coreConfig][govConfig][siteName][loadTimeType][iteration][energy|loadtime] -> npArray of values
+    # websiteData[coreConfig][govConfig][siteName][loadTimeType][iteration]['energy'|'loadtime'] -> npArray of values
     baseContainer = {'energy':np.zeros((iterations,)), 'loadtime': np.zeros((iterations,))}
     byLoadType =    dict(zip(loadTypes,[deepcopy(baseContainer) for loadType in loadTypes]))
     bySite =        dict(zip(sites,[deepcopy(byLoadType) for site in sites]))
@@ -98,14 +96,15 @@ def analyzeData(iterations=10):
                     knownCoreConfigs.append(coreConfig) # track which core configs we've found
             for fileIndex,fileID in enumerate(ids): # for each pair of data files
                 iteration = fileIndex
-                if (iteration >= iterations):
+                if (iteration >= iterations) and verbose:
                     print("skipping additional iterations...")
                     break # stop if we can't hold anymore data, TODO allow for dynamic number of files
 
                 pmcFile = pmcFiles[fileIndex]
-                print ("on file " + pmcFile)
                 jsonFile = jsonFilePrefix + fileID + ".json" # look at same id'd json file
-                print("with file " + jsonFile)
+                if verbose:
+                    print ("on file " + pmcFile)
+                    print("with file " + jsonFile)
 
                 pmcData = pmc.read_data(pmcFile) # ndarray
                 jsonData = pj.read_selenium_data(jsonFile) # dict of mixed types
@@ -129,16 +128,17 @@ def analyzeData(iterations=10):
                                 maxPower = max(pmcData['Power_A15'][start-1],pmcData['Power_A15'][end])
                                 energyBig = (minPower + 0.5*(maxPower-minPower)) * scaleFactor * (pmcData['Time_Milliseconds'][end] - pmcData['Time_Milliseconds'][start])
                                 energy = energyBig + energyLittle
-                                if energy <= energyThreshold:
+                                if energy <= energyThreshold and verbose:
                                     print("0 energy calculated from (" + str(minPower) + "0.5*(" + str(maxPower) + "-" + str(minPower) + ")) * " + str(scaleFactor))
                                     print("scaleFactor = " + str(loadtime) + "/" + str(powmon_sample_period))
                             elif start == end -1: # edge case where data is not available
-                                print("edge case found with loadType" + loadType)
+                                if verbose:
+                                    print("edge case found with loadType" + loadType)
                                 energy = -100
                             else:
                                 energy =  pmc.calc_energy(pmcData['Power_A7'][start:end], pmcData['Time_Milliseconds'][start:end])
                                 energy += pmc.calc_energy(pmcData['Power_A15'][start:end], pmcData['Time_Milliseconds'][start:end])
-                                if energy <= energyThreshold:
+                                if energy <= energyThreshold and verbose:
                                     print("0 energy calculated from regular integration")
                                     print(start)
                                     print(end)
