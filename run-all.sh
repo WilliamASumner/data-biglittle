@@ -3,7 +3,7 @@
 FILEPREFIX=$1
 
 declare -a configs governors iterconfig itergovernor # declare arrays
-configs=("4l-0b" "4l-4b" "0l-4b") # all core configs to test with
+configs=("4l-0b" "4l-4b" "0l-4b" "4l-1b" "4l-2b" "2l-0b" "1l-0b" "0l-2b" "0l-1b") # all core configs to test with
 governors=("pi" "ii" "ip" "pp") # all core configs to test with
 
 array_contains () {
@@ -21,12 +21,12 @@ array_contains () {
 
 gen_iterconfig() { # generate a permutation of the configs
 	iterconfig=()
-	for (( i=1; i <= 3; i++ ))
+	for (( i=1; i <= 9; i++ ))
 	do
-		x=$( echo "$RANDOM % 3" | bc )
+		x=$( echo "$RANDOM % 9" | bc )
 		array_contains iterconfig ${configs["$x"]}
 		while [ $? -eq 0 ]; do
-			x=$( echo "$RANDOM % 3" | bc )
+			x=$( echo "$RANDOM % 9" | bc )
 			array_contains iterconfig ${configs["$x"]}
 		done
 		iterconfig=("${iterconfig[@]}" ${configs["$x"]})
@@ -53,17 +53,18 @@ if [ -z "$FILEPREFIX" ]; then # if they forget to use a prefix...
 	echo "using prefix output" # warn them of their mistake
 fi
 
-for i in {1..3}; do # for each iteration
+for i in {1..20}; do # for each iteration
 	echo "iteration $i"
-	gen_itergovernor
+	#gen_itergovernor
 
 	# for each governor, could be for each config first,
 	# but the idea behind looping through various configs 
 	# in the inner loop is to possiblity that caching will help a config
 	# since it will not be run consecutively 
-	for gov in ${itergovernor[@]}; do  # for each governor, configs could be looped through first,
+	for gov in "ii"; do #${itergovernor[@]}; do  # for each governor, configs could be looped through first,
 		gen_iterconfig
 		for config in ${iterconfig[@]}; do
+			echo "iteration: $i"
 			echo "running ./run.sh $config $FILEPREFIX $gov"
 			./run.sh $config $FILEPREFIX $gov
 			RETVAL=$?
