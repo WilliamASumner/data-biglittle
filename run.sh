@@ -280,6 +280,7 @@ if [[ `service gdm3 status | grep running` ]]; then # gdm is being run, stop it
 	GDM_WAS_OFF="no"
 	#service gdm3 stop
 	echo "please disable gdm"
+	echo "example command: sudo service gdm3 stop"
 	give_usage
 fi
 
