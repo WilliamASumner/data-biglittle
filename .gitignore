@@ -6,3 +6,5 @@ powmon-data/.old-data
 *.log
 *.pyc
 plots/
+monitor
+errlog
