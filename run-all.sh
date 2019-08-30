@@ -58,6 +58,10 @@ if [ -z "$ITERATIONS" ]; then # if no iterations specified
 	echo "WARNING: using 10 iterations" # warn them about this
 fi
 
+if [ -f errlog ]; then # if old error log exists, save it
+	mv errlog errlog.old
+fi
+
 
 for (( iter=1; iter <=$ITERATIONS; iter++ )); do
 	echo "iteration $iter"
@@ -72,15 +76,18 @@ for (( iter=1; iter <=$ITERATIONS; iter++ )); do
 		for config in ${iterconfig[@]}; do
 			echo "iteration: $iter"
 			echo "running ./run.sh $config $FILEPREFIX $gov"
-			./run.sh $config $FILEPREFIX $gov
+			./run.sh $config $FILEPREFIX $gov >> errlog 2>> errlog
 			RETVAL=$?
 			if [[ "$RETVAL" == "1" ]]; then # run.sh didn't like something...
-				echo "run.sh exited with an error, see above output"
-				exit
+				echo "run.sh exited with an error, see log output"
+				tail -n 5 errlog
+				exit 1
 			elif [[ "$RETVAL" == "2" ]]; then # run.sh was hit with a ctrl-c
 				echo  "run.sh caught a SIGINT, exiting..."
-				exit
+				exit 0
 			fi
 		done
 	done
+	sleep 180 # constantly using the ethernet gives kevent dropped errors after a while...
 done
+shutdown
