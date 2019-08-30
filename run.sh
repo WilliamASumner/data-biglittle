@@ -27,7 +27,11 @@ GDM_WAS_OFF="yes"
 
 PROFILE_SAMPLE_PERIOD_US=100000 #10Hz for Powmon
 
-COMMAND_TO_RUN="python sel.py" # firefox $BBENCH_DIR/index.html 
+THREADMON_SAMPLE_PERIOD_US=100000 #10Hz for thread monitor
+THREADMON_DIR="threadmon"
+THREADMON_LOG_FILE="threadmon.log" #10Hz for thread monitor
+
+COMMAND_TO_RUN="./monitor $THREADMON_SAMPLE_PERIOD_US -1 b $THREADMON_LOG_FILE python sel.py" # firefox $BBENCH_DIR/index.html 
 
 PROG_NAME=$0
 CORE_CONFIG=$1
@@ -338,7 +342,8 @@ if ! [[ $OUTPUT_FILE == "test" ]]; then # IF NOT A TEST
 
     # perf options: -F [freq (Hz)] -T [timestamp] -s [per-thread] -d [addresses]
 	# start up command
-	sudo "$PERF" record -F 10 --call-graph fp -T -s -d -- sudo -u odroid taskset -c $core_config_flag $COMMAND_TO_RUN
+	#sudo "$PERF" record -F 10 --call-graph fp -T -s -d -- sudo -u odroid taskset -c $core_config_flag $COMMAND_TO_RUN
+	sudo -u odroid taskset -c $core_config_flag $COMMAND_TO_RUN
 
 	if [[ `pgrep cdatalog` ]]; then # if the power monitor hasn't finished yet
 		echo "killing cdatalog..."
@@ -369,6 +374,14 @@ if ! [[ $OUTPUT_FILE == "test" ]]; then # IF NOT A TEST
 		echo "mv $CURR_DIR/output.json $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json"
 		mv $CURR_DIR/output.json $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json # save command output
 	fi
+
+	if ! [ -f $CURR_DIR/$THREADMON_LOG_FILE ]; then
+		echo "error: '$COMMAND_TO_RUN' did not write out a thread monitor file"
+	else 
+		echo "mv $CURR_DIR/$THREADMON_LOG_FILE $THREADMON_DIR/$OUTPUT_FILE-$SUFFIX.json"
+		mv $CURR_DIR/$THREADMON_LOG_FILE $THREADMON_DIR/$OUTPUT_FILE-$SUFFIX# save command output
+	fi
+
 
 	# Restoring state
 
