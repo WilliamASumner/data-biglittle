@@ -3,44 +3,47 @@ import numpy as np
 import gurobipy as gb # ILP Library
 
 # Local files
-import analyze
-from analyze import sites,loadTypes
+import preprocess
+from preprocess import sites,loadTypes
 
-def getAveragedMatrix( site,phases,coreConfigs,websiteData,matrixType):
+def getAvgMatrix( site,phases,coreConfigs,timeAndEnergy,matrixType):
     arr = np.zeros((len(phases),len(coreConfigs)))
     for p,phase in enumerate(phases):
         for c,config in enumerate(coreConfigs):
-            arr[p][c] = np.mean(websiteData[config]["ii"][site][phase][matrixType])
+            arr[p][c] = np.mean(timeAndEnergy[config]["ii"][site][phase][matrixType])
     return arr
 
 
-def getMatrix(site,phases,coreConfigs,websiteData,matrixType,i):
+def getMatrix(site,phases,coreConfigs,timeAndEnergy,matrixType,i):
     arr = np.zeros((len(phases),len(coreConfigs)))
     for p,phase in enumerate(phases):
         for c,config in enumerate(coreConfigs):
-            arr[p][c] = websiteData[config]["ii"][site][phase][matrixType][i] # TODO: change iteration
+            arr[p][c] = timeAndEnergy[config]["ii"][site][phase][matrixType][i] # TODO: change iteration
     return arr
 
-def main():
+def solveConfigModel(timeAndEnergySingle,coreConfigs,filePrefix="sim-data",verbose=False):
     phases = loadTypes[0:len(loadTypes)-1]
+    phasesToOptVals = dict(zip(sites,[ dict(zip(phases,[[] for i in range(len(phases))])) for site in sites])) # maps phases to [energy, time, optimal coreconfig]
+
     gb.setParam("LogToConsole", 0)
 
-    print("Gathering data...")
-    websiteData,coreConfigs = analyze.analyzeData()
+    if verbose:
+        print("Gathering data...")
 
     numPhases = len(phases)
     numConfigs = len(coreConfigs)
 
     for site in sites:
-        timeMatrix = getAveragedMatrix(site,phases,coreConfigs,websiteData,'loadtime')
-        energyMatrix = getAveragedMatrix(site,phases,coreConfigs,websiteData,'energy')
-        baseIndex = coreConfigs.index("4l-4b")
-        baseTime = np.sum(timeMatrix[p][baseIndex] for p in range(numPhases))
-        baseEnergy = np.sum(energyMatrix[p][baseIndex] for p in range(numPhases))
+        timeMatrix   = getAvgMatrix(site,phases,coreConfigs,timeAndEnergy,'loadtime')
+        energyMatrix = getAvgMatrix(site,phases,coreConfigs,timeAndEnergy,'energy')
+
+        baseIndex    = coreConfigs.index("4l-4b") # calculate time/energ from normal operation
+        baseTime     = np.sum(timeMatrix[p][baseIndex] for p in range(numPhases))
+        baseEnergy   = np.sum(energyMatrix[p][baseIndex] for p in range(numPhases))
+
         # optimize a site
         try:
             model = gb.Model(site)
-
 
             decisionMatrix = [[ model.addVar(vtype=gb.GRB.BINARY,name=p+c) for c in coreConfigs] for p in phases]
 
@@ -53,25 +56,37 @@ def main():
             energySum = gb.quicksum(decisionMatrix[p][c]*energyMatrix[p][c] for c in range(numConfigs) for p in range(numPhases))
             model.setObjective(energySum, gb.GRB.MINIMIZE) # obj function
 
-            model.optimize()
+            model.optimize() # call upon the old magic
 
-            print("Site: %s" % site)
+            if verbose:
+                print("Site: %s" % site)
+
             numPhases = len(phases)
             numConfigs = len(coreConfigs)
             if model.status == gb.GRB.Status.OPTIMAL:
-                print("Minimized Energy: %g mJ, over baseline: %g" % (model.objVal,baseEnergy/model.objVal))
-                print("With time: %g ms, over baseline: %g" % (timeSum.getValue(),baseTime/timeSum.getValue()))
                 sol= model.getAttr('X', model.getVars())
-                finalSolution  = [[sol[c+numConfigs*p] for c in range(numConfigs)] for p in range(numPhases)]
+                siteSolution  = [[sol[c+numConfigs*p] for c in range(numConfigs)] for p in range(numPhases)]
+
+                if verbose:
+                    print("Minimized Energy: %g mJ, over baseline %g mJ: %g" % (model.objVal,baseEnergy,model.objVal/baseEnergy))
+                    print("With time: %g ms, over baseline %g ms: %g" % (timeSum.getValue(),baseTime,baseTime/timeSum.getValue()))
+
                 for p,phase in enumerate(phases):
-                    print("For phase: %s " % phase)
+                    if verbose:
+                        print("For phase: %s " % phase)
                     for c,config in enumerate(coreConfigs):
-                        if finalSolution[p][c] > 0.99:
-                            print("\tConfig %s was chosen" % config)
-            else:
-                print("No solution, relaxing constraint %s and adding second objective function" % "time constraint")
+                        if siteSolution[p][c] > 0.99:
+                            phasesToOptVals[site][phase] = [timeMatrix[p][c],energyMatrix[p][c],config] # save the results we found
+                            if verbose:
+                                print("\tConfig %s was chosen" % config)
+
+            elif verbose: print("No solution") # , relaxing constraint %s and adding second objective function" % "time constraint")
+
         except gb.GurobiError as e:
-            print("Error encountered: %d %s" % (e.errno,str(e)))
+            if verbose: print("Error encountered: %d %s" % (e.errno,str(e)))
+
+    return phasesToOptVals
 
 if __name__ == '__main__':
-    main()
+    timeAndEnergy,coreConfigs = preprocess.parseAndCalcEnergy("sim-data",iterations=20)
+    print(solveConfigModel(timeAndEnergy,coreConfigs))

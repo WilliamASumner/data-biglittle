@@ -59,9 +59,8 @@ def timestamp_interval(start,end,timestampArr):
     end = index_timestamp(end,timestampArr)
     return (start,end+1) # plus 1 for python indexing
 
-def analyzeData(filePrefix = "selenium-redo-", iterations=10,verbose=False):
-    filePrefix = "selenium-redo-"
-    if filePrefix[-1] != '-': # some tiny error checking
+def parseAndCalcEnergy(filePrefix="sim-data-", iterations=10,verbose=False):
+    if filePrefix[-1] != '-': # some quick error checking
         filePrefix += "-"
 
     pmcDir = "powmon-data/"
@@ -96,8 +95,9 @@ def analyzeData(filePrefix = "selenium-redo-", iterations=10,verbose=False):
                     knownCoreConfigs.append(coreConfig) # track which core configs we've found
             for fileIndex,fileID in enumerate(ids): # for each pair of data files
                 iteration = fileIndex
-                if (iteration >= iterations) and verbose:
-                    print("skipping additional iterations...")
+                if (iteration >= iterations):
+                    if verbose:
+                        print("skipping additional iterations...")
                     break # stop if we can't hold anymore data, TODO allow for dynamic number of files
 
                 pmcFile = pmcFiles[fileIndex]
@@ -131,6 +131,8 @@ def analyzeData(filePrefix = "selenium-redo-", iterations=10,verbose=False):
                                 if energy <= energyThreshold and verbose:
                                     print("0 energy calculated from (" + str(minPower) + "0.5*(" + str(maxPower) + "-" + str(minPower) + ")) * " + str(scaleFactor))
                                     print("scaleFactor = " + str(loadtime) + "/" + str(powmon_sample_period))
+                                    if loadtime == 0: # if we didn't get any meaningful data because of a low loadtime
+                                        energy = -100 # make sure it gets filtered out
                             elif start == end -1: # edge case where data is not available
                                 if verbose:
                                     print("edge case found with loadType" + loadType)
