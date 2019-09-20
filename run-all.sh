@@ -3,6 +3,11 @@
 FILEPREFIX=$1
 ITERATIONS=$2
 
+usage () {
+    echo "$0 [file-prefix=output] [num-iterations=10]"
+    exit 0
+}
+
 declare -a configs governors iterconfig itergovernor # declare arrays
 configs=("4l-0b" "4l-4b" "0l-4b" "4l-1b" "4l-2b" "2l-0b" "1l-0b" "0l-2b" "0l-1b") # all core configs to test with
 governors=("pi" "ii" "ip" "pp") # all core configs to test with
@@ -49,6 +54,9 @@ gen_itergovernor() { # generate a permutation of the governors
 }
 
 #startup checks
+if [[ "$1" == "-h" ]]; then # simple -h check, no fancy getopt
+    usage
+fi
 if [ -z "$FILEPREFIX" ]; then # if they forget to use a prefix... 
 	FILEPREFIX="output" # punish them with this vague one
 	echo "WARNING: using prefix output" # warn them of their mistake
@@ -90,4 +98,3 @@ for (( iter=1; iter <=$ITERATIONS; iter++ )); do
 	done
 	sleep 180 # constantly using the ethernet gives kevent dropped errors after a while...
 done
-shutdown
