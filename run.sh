@@ -6,6 +6,9 @@ HOME="/home/odroid"
 CURR_DIR="/home/odroid/data-collector"
 BBENCH_DIR="/home/odroid/bbench-3.0"
 STHHAMP_DIR="/home/odroid/experimental-platform-software"
+PERF_DIR="/home/odroid/data-collector/perf-data"
+
+PERF="/home/odroid/bin/perf"
 
 MONOUT_DIR="$CURR_DIR/powmon-data"
 JSON_DIR="$CURR_DIR/json-data"
@@ -280,6 +283,7 @@ if [[ `service gdm3 status | grep running` ]]; then # gdm is being run, stop it
 	GDM_WAS_OFF="no"
 	#service gdm3 stop
 	echo "please disable gdm"
+	echo "example command: sudo service gdm3 stop"
 	give_usage
 fi
 
@@ -330,16 +334,34 @@ if ! [[ $OUTPUT_FILE == "test" ]]; then # IF NOT A TEST
     # options are: [outputfile] [period (us)] [use-pmcs] [performance counters...]
 
 	# assign the power monitor to core 0, which never turns off
-	taskset -c 0 "$STHHAMP_DIR/datalogging_code/cdatalog" "$MONOUT_DIR/$OUTPUT_FILE-$SUFFIX" $PROFILE_SAMPLE_PERIOD_US 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &
+	taskset -c 0 "$STHHAMP_DIR/datalogging_code/cdatalog" "$CURR_DIR/cdatalog-output" $PROFILE_SAMPLE_PERIOD_US 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &
 
     # perf options: -F [freq (Hz)] -T [timestamp] -s [per-thread] -d [addresses]
 	# start up command
-	perf record -F 10 --call-graph fp -T -s -d -- sudo -u odroid taskset -c $core_config_flag $COMMAND_TO_RUN
+	sudo "$PERF" record -F 10 --call-graph fp -T -s -d -- sudo -u odroid taskset -c $core_config_flag $COMMAND_TO_RUN
 
 	if [[ `pgrep cdatalog` ]]; then # if the power monitor hasn't finished yet
 		echo "killing cdatalog..."
 		pkill cdatalog # kill it
 	fi
+
+    # Saving output
+
+	if ! [ -f $CURR_DIR/cdatalog-output ]; then
+		echo "error: '$STHHAMP_DIR/datalogging_code/cdatalog' did not write out a profile"
+	else 
+		echo "mv $CURR_DIR/cdatalog-output $MONOUT_DIR/$OUTPUT_FILE-$SUFFIX" 
+		mv $CURR_DIR/cdatalog-output $MONOUT_DIR/$OUTPUT_FILE-$SUFFIX # save cdatalog output
+	fi
+
+
+	if ! [ -f $CURR_DIR/perf.data ]; then
+		echo "error: '$PERF' did not write out a profile"
+	else 
+		echo "mv $CURR_DIR/perf.data $PERF_DIR/$OUTPUT_FILE-$SUFFIX.data"
+		mv $CURR_DIR/perf.data $PERF_DIR/$OUTPUT_FILE-$SUFFIX.data # save perf output
+	fi
+
 
 	if ! [ -f $CURR_DIR/output.json ]; then
 		echo "error: '$COMMAND_TO_RUN' did not write out a json file"
@@ -347,6 +369,9 @@ if ! [[ $OUTPUT_FILE == "test" ]]; then # IF NOT A TEST
 		echo "mv $CURR_DIR/output.json $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json"
 		mv $CURR_DIR/output.json $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json # save command output
 	fi
+
+	# Restoring state
+
 	restore_governor
 
 	#if [[ "$INTERNET_WAS_OFF" == "no" ]]; then # restart internet if it was disabled by this script
@@ -362,12 +387,23 @@ else
 	set_governor $GOV_STR
 
 	echo "starting southhampton monitor"
-	echo "taskset -c 0 $STHHAMP_DIR/datalogging_code/cdatalog $MONOUT_DIR/$OUTPUT_FILE-$SUFFIX $PROFILE_SAMPLE_PERIOD_US 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &"
+	echo "taskset -c 0 $CURR_DIR/cdatalog-output $MONOUT_DIR/$OUTPUT_FILE-$SUFFIX $PROFILE_SAMPLE_PERIOD_US 1 0x08 0x16 0x60 0x61 0x08 0x40 0x41 0x14 0x50 0x51 &"
 
 	echo "starting command"
-	echo "sudo -u odroid taskset -c $core_config_flag $COMMAND_TO_RUN &"
+	echo "sudo $PERF record -F 10 --call-graph fp -T -s -d -- sudo -u odroid taskset -c $core_config_flag $COMMAND_TO_RUN"
+	echo "sudo -u odroid taskset -c $core_config_flag $COMMAND_TO_RUN"
 
-	echo "moving output file"
+	echo ""
+	echo "moving cdatalog output file"
+	echo "mv $CURR_DIR/cdatalog-output $MONOUT_DIR/$OUTPUT_FILE-$SUFFIX" 
+
+	echo ""
+	echo "moving perf output file"
+	echo "mv $CURR_DIR/perf.data $PERF_DIR/$OUTPUT_FILE-$SUFFIX.data"
+
+
+	echo ""
+	echo "moving selenium output file"
 	echo "mv $CURR_DIR/output.json $JSON_DIR/$OUTPUT_FILE-$SUFFIX.json"
 
 	restore_governor
