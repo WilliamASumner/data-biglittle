@@ -4,13 +4,15 @@ import gurobipy as gb # ILP Library
 
 # Local files
 import preprocess
-from preprocess import sites,loadTypes
+from preprocess import sites,loadTypes,phases,coreConfigs
 
-def getAvgMatrix( site,phases,coreConfigs,timeAndEnergy,matrixType):
+from preprocess import avgMatrix,parseAndCalcEnergy
+
+def extractMatrix(site,timeAndEnergy,matrixType):
     arr = np.zeros((len(phases),len(coreConfigs)))
     for p,phase in enumerate(phases):
         for c,config in enumerate(coreConfigs):
-            arr[p][c] = np.mean(timeAndEnergy[config]["ii"][site][phase][matrixType])
+            arr[p][c] = timeAndEnergy[config]["ii"][site][phase][matrixType]
     return arr
 
 
@@ -21,8 +23,7 @@ def getMatrix(site,phases,coreConfigs,timeAndEnergy,matrixType,i):
             arr[p][c] = timeAndEnergy[config]["ii"][site][phase][matrixType][i] # TODO: change iteration
     return arr
 
-def solveConfigModel(timeAndEnergySingle,coreConfigs,filePrefix="sim-data",verbose=False):
-    phases = loadTypes[0:len(loadTypes)-1]
+def solveConfigModel(timeAndEnergySet,coreConfigs,filePrefix="sim-data",verbose=False):
     phasesToOptVals = dict(zip(sites,[ dict(zip(phases,[[] for i in range(len(phases))])) for site in sites])) # maps phases to [energy, time, optimal coreconfig]
 
     gb.setParam("LogToConsole", 0)
@@ -34,8 +35,8 @@ def solveConfigModel(timeAndEnergySingle,coreConfigs,filePrefix="sim-data",verbo
     numConfigs = len(coreConfigs)
 
     for site in sites:
-        timeMatrix   = getAvgMatrix(site,phases,coreConfigs,timeAndEnergy,'loadtime')
-        energyMatrix = getAvgMatrix(site,phases,coreConfigs,timeAndEnergy,'energy')
+        timeMatrix   = extractMatrix(site,timeAndEnergySet,'loadtime')
+        energyMatrix = extractMatrix(site,timeAndEnergySet,'energy')
 
         baseIndex    = coreConfigs.index("4l-4b") # calculate time/energ from normal operation
         baseTime     = np.sum(timeMatrix[p][baseIndex] for p in range(numPhases))
@@ -88,5 +89,12 @@ def solveConfigModel(timeAndEnergySingle,coreConfigs,filePrefix="sim-data",verbo
     return phasesToOptVals
 
 if __name__ == '__main__':
-    timeAndEnergy,coreConfigs = preprocess.parseAndCalcEnergy("sim-data",iterations=20)
-    print(solveConfigModel(timeAndEnergy,coreConfigs))
+    timeAndEnergy,coreConfigs = parseAndCalcEnergy("sim-data",iterations=20)
+    timeAndEnergySet = avgMatrix(timeAndEnergy) # avg all iterations
+    solution = solveConfigModel(timeAndEnergy,coreConfigs)
+
+    with open("sim-data-avg-optimal.txt","w") as outFile: # Write out results
+        for site in sites:
+            outFile.write(site+"\n")
+            for phase in phases:
+                outFile.write(phase + ":" + str(solution[site][phase]) + "\n")
