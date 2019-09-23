@@ -34,72 +34,38 @@ def normalize_array(x):
         return x
     return x /(np.sum(x))
 
-def filter_iterations(data,iterations):
-    return data[0:iterations+1]
 
-def filter_zeros(data):
-    return data[data >= 0]
+def comparisonBar(timeData,energyData,axes=None,fig=None,bottom=None,timeErrBars=None,energyErrBars=None,width=0.35):
+    if fig is None or axes is None:
+        fig, axes = plt.subplots(1,1, figsize=(8,8))
 
-def filter_outliers(data, m=2):
-    return data[abs(data - np.mean(data)) < m * np.std(data)]
+    if bottom is None:
+        bottomTime    = np.zeros(timeData.shape[1]) # start at 0
+        bottomEnergy  = np.zeros(energyData.shape[1])
+    else:
+        bottomTime    = bottom
+        bottomEnergy  = bottom
+    baseTime = None
 
-def cleanup_data(data,iterations):
-    return filter_iterations(filter_zeros(filter_outliers(data)),iterations)
+    timeInd = np.arange(timeData.shape[1])
+    energyInd = np.arange(energyData.shape[1])
 
-def stackedBar(energyAndTime,outputPrefix,coreConfigs,axes=None):
-    width = 0.35
-    ind = np.arange(2) # one for energy and one for load time
-    for site in sites:
-        for gov in govConfigs:
-            fig, axs = plt.subplots(3,1, figsize=(8,8))
-            for index,config in enumerate(coreConfigs):
-                prevMeans = [0,0] # start at the bottom
-                #print("config: " + config)
-                for loadType in loadTypes:
-                    loadTypeData = energyAndTime[config][gov][site][loadType]
-                    means = [np.median(loadTypeData['loadtime']),
-                            np.median(loadTypeData['energy'])]
-                    #print(loadTypeData['loadtime'])
-                    #print(normalize_array(loadTypeData['loadtime']))
-                    #print("means " + str(means))
-                    stds = [np.std(loadTypeData['loadtime']),
-                            np.std(loadTypeData['energy'])]
-                    axs[index].bar(ind,means,width,bottom=prevMeans)
-                    if np.sum(means) != 0:
-                        prevMeans = means # no copying required because means becomes a new list
-                axs[index].set_title(site + " with configuration " + config)
-                axs[index].set_xticks(ind)
-                axs[index].set_xticklabels(('Load Time (ms)','Energy (mJ)'))
-                axs[index].set_ylabel('Average Load Time (ms) per Phase')
-                energyAxis = axs[index].twinx()
-                energyAxis.set_ylabel('Average Energy (mJ) per Phase')
-            axs[0].legend(loadTypes)
-        fig.tight_layout()
+    for (i,(loadtimes,energies)) in enumerate(zip(timeData,energyData)): # for each "layer"
+        if i == 0: # first place is optimal
+            optTime   = axes.bar(timeInd-width/2.0,loadtimes,width) # plotting optimal
+            optEnergy = axes.bar(energyInd+width/2.0,energies,width)
+        else:
+            baseTime   = axes.bar(timeInd-width/2.0,loadtimes,width,bottom=bottomTime,yerr=timeErrBars) # only err bars on collected data
+            baseEnergy = axes.bar(energyInd+width/2.0,energies,width,bottom=bottomEnergy,yerr=energyErrBars)
+        bottomTime    = loadtimes
+        bottomEnergy  = energies
+    axes.set_xticks(timeInd) # set up xticks
+    if baseTime is not None:
+        axes.legend((optTime,baseTime,optEnergy,baseEnergy),('Oracle Time','Base time','Oracle Energy','Base Energy')) # TODO fix this to be generic
+    else:
+        axes.legend((optTime,optEnergy),('Time','Energy')) # TODO fix this to be generic
 
-
-def scatterPlot(energyAndTime,outputPrefix,coreConfigs):
-    symbols=['x','o','*','+','>','<','s','v','X','D','p','H']
-    for siteIndex,site in enumerate(sites):
-        for gov in govConfigs:
-            addLegend = True
-            fig, axs = plt.subplots(4,1, figsize=(8,8))
-            for eventIndex,loadType in enumerate(loadTypes[0:len(loadTypes)-1]):
-                for configIndex,config in enumerate(coreConfigs):
-                    loadTypeData = energyAndTime[config][gov][site][loadType]
-
-                    axs[eventIndex%4].scatter(loadTypeData['loadtime'][0],
-                            loadTypeData['energy'][0],
-                            label=config,c="black",
-                            alpha=0.8,marker=symbols[configIndex])
-
-                    axs[eventIndex%4].set_title(loadTypesEnglishMap[loadType])
-                axs[eventIndex%4].set_ylabel('Energy (mJ)')
-                if eventIndex % 4 == 3:
-                    axs[eventIndex%4].set_xlabel('Load Time (ms)')
-                if (addLegend):
-                    fig.legend(loc=4)
-                    addLegend = False
-            fig.tight_layout()
+    return (fig,axes)
 
 def siteScatterPlot(energyAndTime,coreConfigs,site='amazon',axes=None,figure=None,errorBars=False):
     symbols=['x','o','*','s','>','<','+','v','X','D','p','H']
@@ -113,8 +79,8 @@ def siteScatterPlot(energyAndTime,coreConfigs,site='amazon',axes=None,figure=Non
         for eventIndex,loadType in enumerate(loadTypes[0:len(loadTypes)-1]):
             for configIndex,config in enumerate(coreConfigs):
                 loadTypeData = energyAndTime[config][gov][site][loadType]
-                loadTypeData['loadtime'] = cleanup_data(loadTypeData['loadtime'],10)
-                loadTypeData['energy']   = cleanup_data(loadTypeData['energy'],10)
+                loadTypeData['loadtime'] = loadTypeData['loadtime']
+                loadTypeData['energy']   = loadTypeData['energy']
                 x = np.median(loadTypeData['loadtime'])
                 y = np.median(loadTypeData['energy'])
 
@@ -137,22 +103,15 @@ def siteScatterPlot(energyAndTime,coreConfigs,site='amazon',axes=None,figure=Non
         handles,labels = ax[3].get_legend_handles_labels() # only apply a legend to the bottom one
         display = tuple([i for i in range(len(coreConfigs))]) # only display the first few handles
         fig.legend([handle for i,handle in enumerate(handles) if i in display],
-                      [label for i,label in enumerate(labels) if i in display])
+                      [label for i,label in enumerate(labels) if i in display],
+                      bbox_to_anchor=(1.2,1),
+                      loc="upper right",
+                      bbox_transform=plt.gcf().transFigure)
         return (fig,ax)
 
-def multiScatterPlot(energyAndTime,outputPrefix,coreConfigs,sites=sites,axes=None,toFile=True):
-    for siteIndex,site in enumerate(sites):
-        plt.clf()
-        fig,axs = plt.subplots(4,1,figsize=(8,8)) # create a new figure
-        siteScatterPlot(energyAndTime,coreConfigs,site,axes=axs,figure=fig)
-        if toFile:
-            plt.savefig(outputPrefix+site+"-scatter.pdf")
-        else:
-            plt.show()
-
 def main():
-    graphType = "multiscatter"
-    if len(sys.argv) > 1 and sys.argv[1] in ["multiscatter","scatter","stackedbar"]:
+    graphType = "scatter"
+    if len(sys.argv) > 1 and sys.argv[1] in ["scatter","stackedbar"]:
         graphType = sys.argv[1]
 
     outputPrefix = "graphs/"
@@ -160,13 +119,9 @@ def main():
     energyAndTime,knownCoreConfigs = preprocess.parseAndCalcEnergy(iterations=20,filePrefix="sim-data",verbose=True)
 
     if graphType == "scatter":
-        scatterPlot(energyAndTime,outputPrefix,knownCoreConfigs)
-        plt.savefig(outputPrefix+site+"-"+gov+"-scatter.pdf")
-    elif graphType == "multiscatter":
-        multiScatterPlot(energyAndTime,outputPrefix,knownCoreConfigs)
-    elif graphType == "stackedbar":
-        stackedBar(energyAndTime,outputPrefix,knownCoreConfigs)
-        plt.savefig(outputPrefix+site+"-"+gov+"-stackedbar.pdf")
+        siteScatterPlot(energyAndTime,outputPrefix,knownCoreConfigs)
+        plt.show()
+        #plt.savefig(outputPrefix+site+"-"+gov+"-scatter.pdf")
 
 if __name__ == "__main__":
     main()
