@@ -30,6 +30,8 @@ loadTypes           = ['navigationStart', 'requestStart', 'domLoading', 'domComp
 loadTypesEnglish    = ['Setup Connection','Download Page','Process Page','Run Dynamic Content']
 loadTypesEnglishMap = dict(zip(loadTypes[0:4],loadTypesEnglish))
 
+phases              = loadTypes[0:len(loadTypes)-1]
+
 sites = [ 'amazon',     'bbc',  'cnn',
           'craigslist', 'ebay', 'espn',
           'google',     'msn',  'slashdot',
@@ -58,6 +60,25 @@ def timestamp_interval(start,end,timestampArr):
     start = index_timestamp(start,timestampArr)
     end = index_timestamp(end,timestampArr)
     return (start,end+1) # plus 1 for python indexing
+
+def filter_zeros(data): # remove 0 data
+    return data[data >= 0]
+
+def filter_outliers(data, m): # remove outliers
+    return data[abs(data - np.mean(data)) < m * np.std(data)]
+
+def cleanup_entry(entry,m=2):
+    return filter_zeros(filter_outliers(entry,m))
+
+def cleanup_data(data):
+    for coreConfig in coreConfigs:
+        for govConfig in govConfigs:
+            for site in sites:
+                for loadType in loadTypes:
+                    for matrixType in ["loadtime","energy"]:
+                        data[coreConfig][govConfig][site][loadType][matrixType] = \
+                            cleanup_entry(data[coreConfig][govConfig][site][loadType][matrixType],m=3)
+
 
 def parseAndCalcEnergy(filePrefix="sim-data-", iterations=10,verbose=False):
     if filePrefix[-1] != '-': # some quick error checking
@@ -153,7 +174,22 @@ def parseAndCalcEnergy(filePrefix="sim-data-", iterations=10,verbose=False):
                             else:
                                 websiteData[coreConfig][govConfig][site][loadType]['energy'][iteration] = \
                                         energy*(loadtime/powmon_sample_period)
+
+    cleanup_data(websiteData)
     return (websiteData,knownCoreConfigs)
+
+def avgMatrix(timeAndEnergy,iterStart=0,iterStop=0): # return avged matrix
+    if iterStop == 0:
+        iterStop = len(timeAndEnergy['4l-4b']['ii']['amazon']['navigationStart']['energy'])
+    for coreConfig in coreConfigs:
+        for loadType in loadTypes:
+            for govConfig in govConfigs:
+                for site in sites:
+                    timeAndEnergy[coreConfig][govConfig][site][loadType]['energy'] = \
+                        np.mean(timeAndEnergy[coreConfig][govConfig][site][loadType]['energy'][iterStart:iterStop])
+                    timeAndEnergy[coreConfig][govConfig][site][loadType]['loadtime'] = \
+                        np.mean(timeAndEnergy[coreConfig][govConfig][site][loadType]['loadtime'][iterStart:iterStop])
+    return timeAndEnergy
 
 if __name__ == "__main__":
     print(analyzeData(3))
