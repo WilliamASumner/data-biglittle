@@ -34,6 +34,14 @@ def normalize_array(x):
         return x
     return x /(np.sum(x))
 
+def generalBar(data,labels,axes=None,fig=None,width=0.35):
+    if fig is None or axes is None:
+        fig, axes = plt.subplots(1,1, figsize=(8,8))
+    ind = np.arange(data.shape[0])
+    axes.bar(ind,data,width)
+    axes.set_xticks(ind)
+    return (fig,axes)
+
 
 def comparisonBar(timeData,energyData,axes=None,fig=None,bottom=None,timeErrBars=None,energyErrBars=None,width=0.35):
     if fig is None or axes is None:

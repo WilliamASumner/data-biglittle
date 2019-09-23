@@ -10,7 +10,7 @@ import sys
 
 from sim import solveConfigModel
 from preprocess import parseAndCalcEnergy,loadTypes,phases,avgMatrix,sites
-from data_plot import siteScatterPlot,comparisonBar
+from data_plot import siteScatterPlot,comparisonBar,generalBar
 
 def getAxDims(ax,fig):
     if ax is None or fig is None:
@@ -72,7 +72,7 @@ def graphAbsComparison(timeAndEnergy,solMatrix,site='amazon',outputPrefix="graph
 
     fig,axes = comparisonBar(timeData,energyData,timeErrBars=timeErr,energyErrBars=energyErr)
 
-    fig.suptitle(site + " Loadtime and Energy Improvement (absolute)",y=1.01,fontsize='xx-large')
+    fig.suptitle(site + " Oracle and Baseline Comparison (absolute)",y=1.01,fontsize='xx-large')
     axes.set_xticklabels(phases)
     axes.set_ylabel('Average Load Time (ms) per Phase')
     energyAxis = axes.twinx()
@@ -105,7 +105,7 @@ def graphRelComparison(timeAndEnergy,solMatrix,site='amazon',outputPrefix="graph
 
     fig,axes = comparisonBar(timeData,energyData,timeErrBars=timeErr,energyErrBars=energyErr)
 
-    fig.suptitle(site + " Loadtime and Energy Improvement (relative)",y=1.01,fontsize='xx-large')
+    fig.suptitle(site + " Oracle and Baseline Comparison (relative)",y=1.01,fontsize='xx-large')
     axes.set_xticklabels(phases)
     axes.set_ylabel('Times Improvement over baseline')
 
@@ -117,10 +117,30 @@ def graphRelComparison(timeAndEnergy,solMatrix,site='amazon',outputPrefix="graph
         plt.show()
     plt.close(fig)
 
+def graphModelTime(solMatrix,outputPrefix="graphs/",writeOut=False):
+    loadTimes = np.zeros(len(sites)) # displaying solution times of all phases
+    for s,site in enumerate(sites):
+        if not(solMatrix[site][phases[0]] is None):
+            loadTimes[s] = solMatrix[site][phases[0]][3] # only need one time for whole site
+    (fig,axes) = generalBar(loadTimes*1000,sites)
+
+    fig.suptitle("Site Model Optimization Times",y=1.01,fontsize='xx-large')
+    axes.set_ylabel('Time to Optimize Model (ms)')
+    axes.set_xticklabels(sites)
+    fig.tight_layout()
+    if writeOut:
+        plt.savefig(outputPrefix+"modeltimes.pdf",bbox_inches="tight")
+        plt.clf()
+    else: 
+        plt.show()
+    plt.close(fig)
+
+
+
 def main():
     timeAndEnergy,coreConfigs = parseAndCalcEnergy(filePrefix="sim-data",iterations=20)
     timeAndEnergySet = avgMatrix(timeAndEnergy) # avg all iterations
-    solMatrix = solveConfigModel(timeAndEnergySet,coreConfigs,verbose=True) # optimize model
+    solMatrix = solveConfigModel(timeAndEnergySet,coreConfigs,logFilename='sol_plot.log') # optimize model
     verbose = True
 
     for site in sites:
@@ -134,6 +154,9 @@ def main():
         if verbose:
             print("absolute comparison")
         graphAbsComparison(timeAndEnergy,solMatrix,site=site,writeOut=True)
+    if verbose:
+        print("model solving times")
+    graphModelTime(solMatrix,writeOut=True)
 
 if __name__ == '__main__':
     main()

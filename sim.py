@@ -5,8 +5,9 @@ import gurobipy as gb # ILP Library
 # Local files
 import preprocess
 from preprocess import sites,loadTypes,phases,coreConfigs
-
 from preprocess import avgMatrix,parseAndCalcEnergy
+
+import os
 
 def extractMatrix(site,timeAndEnergy,matrixType):
     arr = np.zeros((len(phases),len(coreConfigs)))
@@ -23,13 +24,14 @@ def getMatrix(site,phases,coreConfigs,timeAndEnergy,matrixType,i):
             arr[p][c] = timeAndEnergy[config]["ii"][site][phase][matrixType][i] # TODO: change iteration
     return arr
 
-def solveConfigModel(timeAndEnergySet,coreConfigs,filePrefix="sim-data",verbose=False):
+def solveConfigModel(timeAndEnergySet,coreConfigs,filePrefix="sim-data",verbose=False,logFilename=None):
     phasesToOptVals = dict(zip(sites,[ dict(zip(phases,[None for i in range(len(phases))])) for site in sites])) # maps phases to [energy, time, optimal coreconfig]
 
-    gb.setParam("LogToConsole", 0)
 
     if verbose:
         print("Gathering data...")
+    if not(logFilename is None):
+        gb.setParam("LogToConsole", 0) # save output to log file
 
     numPhases = len(phases)
     numConfigs = len(coreConfigs)
@@ -77,7 +79,7 @@ def solveConfigModel(timeAndEnergySet,coreConfigs,filePrefix="sim-data",verbose=
                         print("For phase: %s " % phase)
                     for c,config in enumerate(coreConfigs):
                         if siteSolution[p][c] > 0.99:
-                            phasesToOptVals[site][phase] = [timeMatrix[p][c],energyMatrix[p][c],config] # save the results we found
+                            phasesToOptVals[site][phase] = [timeMatrix[p][c],energyMatrix[p][c],config,model.runTime] # save the results we found
                             if verbose:
                                 print("\tConfig %s was chosen" % config)
 
@@ -105,7 +107,7 @@ def solveConfigModel(timeAndEnergySet,coreConfigs,filePrefix="sim-data",verbose=
                             print("For phase: %s " % phase)
                         for c,config in enumerate(coreConfigs):
                             if siteSolution[p][c] > 0.99:
-                                phasesToOptVals[site][phase] = [timeMatrix[p][c],energyMatrix[p][c],config] # save the results we found
+                                phasesToOptVals[site][phase] = [timeMatrix[p][c],energyMatrix[p][c],config,model.runTime] # save the results we found
                                 if verbose:
                                     print("\tConfig %s was chosen" % config)
                 elif verbose: print("No feasible solution possible, even with relaxation")
@@ -116,12 +118,15 @@ def solveConfigModel(timeAndEnergySet,coreConfigs,filePrefix="sim-data",verbose=
         except gb.GurobiError as e:
             if verbose: print("Error encountered: %d %s" % (e.errno,str(e)))
 
+    if not(logFilename is None):
+        os.rename('gurobi.log',logFilename)
+
     return phasesToOptVals
 
 if __name__ == '__main__':
     timeAndEnergy,coreConfigs = parseAndCalcEnergy("sim-data",iterations=20)
     timeAndEnergySet = avgMatrix(timeAndEnergy) # avg all iterations
-    solution = solveConfigModel(timeAndEnergy,coreConfigs)
+    solution = solveConfigModel(timeAndEnergy,coreConfigs,logFilename='model_solve.log')
 
     with open("sim-data-avg-optimal.txt","w") as outFile: # Write out results
         for site in sites:
