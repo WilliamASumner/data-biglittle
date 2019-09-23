@@ -24,7 +24,7 @@ def getMatrix(site,phases,coreConfigs,timeAndEnergy,matrixType,i):
     return arr
 
 def solveConfigModel(timeAndEnergySet,coreConfigs,filePrefix="sim-data",verbose=False):
-    phasesToOptVals = dict(zip(sites,[ dict(zip(phases,[[] for i in range(len(phases))])) for site in sites])) # maps phases to [energy, time, optimal coreconfig]
+    phasesToOptVals = dict(zip(sites,[ dict(zip(phases,[None for i in range(len(phases))])) for site in sites])) # maps phases to [energy, time, optimal coreconfig]
 
     gb.setParam("LogToConsole", 0)
 
@@ -81,7 +81,37 @@ def solveConfigModel(timeAndEnergySet,coreConfigs,filePrefix="sim-data",verbose=
                             if verbose:
                                 print("\tConfig %s was chosen" % config)
 
-            elif verbose: print("No solution") # , relaxing constraint %s and adding second objective function" % "time constraint")
+            elif model.status == gb.GRB.INFEASIBLE:
+                if verbose:
+                    print("Unable to find feasible solution... relaxing constraints and optimizing...")
+                # feasRelaxS ( #  - relax constraints a bit to find a solution
+                # relaxobjtyp - 1 = minimize squares of the bound and constraint violations
+                # minrelax - whether to minimize objective function (false) or objective function AND violation (true, our case)
+                # vrelax - whether to variable bounds can be relaxed (false in our case)
+                # crelax - whether constraints can be relaxed (true, we can increase our cutoff time a bit...)
+                model.feasRelaxS(1,True,False,True)
+                model.optimize()
+
+                if model.status == gb.GRB.Status.OPTIMAL:
+                    sol= model.getAttr('X', model.getVars())
+                    siteSolution  = [[sol[c+numConfigs*p] for c in range(numConfigs)] for p in range(numPhases)]
+
+                    if verbose:
+                        print("Minimized Energy: %g mJ, over baseline %g mJ: %g" % (model.objVal,baseEnergy,model.objVal/baseEnergy))
+                        print("With time: %g ms, over baseline %g ms: %g" % (timeSum.getValue(),baseTime,baseTime/timeSum.getValue()))
+
+                    for p,phase in enumerate(phases):
+                        if verbose:
+                            print("For phase: %s " % phase)
+                        for c,config in enumerate(coreConfigs):
+                            if siteSolution[p][c] > 0.99:
+                                phasesToOptVals[site][phase] = [timeMatrix[p][c],energyMatrix[p][c],config] # save the results we found
+                                if verbose:
+                                    print("\tConfig %s was chosen" % config)
+                elif verbose: print("No feasible solution possible, even with relaxation")
+
+
+            elif verbose: print("No feasible solution") # , relaxing constraint %s and adding second objective function" % "time constraint")
 
         except gb.GurobiError as e:
             if verbose: print("Error encountered: %d %s" % (e.errno,str(e)))
