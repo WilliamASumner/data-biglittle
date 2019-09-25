@@ -7,10 +7,12 @@ from matplotlib.patches import Ellipse # shapes
 import numpy as np
 
 import sys
+import data_plot
 
 from sim import solveConfigModel
-from preprocess import parseAndCalcEnergy,loadTypes,phases,avgMatrix,sites
-from data_plot import siteScatterPlot,comparisonBar,generalBar
+from preprocess import parseAndCalcEnergy,avgMatrix
+from preprocess import loadTypes,phases,phasesSimple,sites,phaseMap
+from data_plot import siteScatterPlot,comparisonBar,genericCompBar,generalBar,newline
 
 def getAxDims(ax,fig):
     if ax is None or fig is None:
@@ -56,27 +58,54 @@ def graphAbsComparison(timeAndEnergy,solMatrix,site='amazon',outputPrefix="graph
     timeData   = np.zeros((2,len(phases)))
     energyData = np.zeros((2,len(phases)))
 
-    timeErr   = np.zeros(len(phases))
-    energyErr = np.zeros(len(phases))
+    colors = [[] for i in range(4)] # two layers of color for each data set
 
     for p,phase in enumerate(phases):
         if solMatrix[site][phase] is None:
             continue
-        timeData[0][p]   = solMatrix[site][phase][0] # optimal values calculated for the phase
-        energyData[0][p] = solMatrix[site][phase][1] # offset on top of old data
-        timeData[1][p]   = np.mean(timeAndEnergy['4l-4b']['ii'][site][phase]['loadtime'])
-        energyData[1][p] = np.mean(timeAndEnergy['4l-4b']['ii'][site][phase]['energy'])
+        baseTime   = timeAndEnergy['4l-4b']['ii'][site][phase]['loadtime'] # baseline values
+        baseEnergy = timeAndEnergy['4l-4b']['ii'][site][phase]['energy']
 
-        timeErr[p]    = np.std(timeAndEnergy['4l-4b']['ii'][site][phase]['loadtime'])
-        energyErr[p]  = np.std(timeAndEnergy['4l-4b']['ii'][site][phase]['energy'])
+        minTime = min(baseTime,solMatrix[site][phase][0])
+        minEnergy = min(baseTime,solMatrix[site][phase][1])
 
-    fig,axes = comparisonBar(timeData,energyData,timeErrBars=timeErr,energyErrBars=energyErr)
+        if minTime == baseTime:
+            colors[0].append(data_plot.blue) # baseTime gets a blue color
+            colors[1].append(data_plot.orange)
+        else:
+        #elif solMatrix[site][phase][0] == baseTime:
+            colors[0].append(data_plot.orange)
+            colors[1].append(data_plot.blue)
+       # else:
+       #     colors[0].append(data_plot.grey) # grey out matches
+       #     colors[1].append(data_plot.grey)
+
+        if minEnergy == baseEnergy:
+            colors[2].append(data_plot.green)
+            colors[3].append(data_plot.red)
+        #elif solMatrix[site][phase][1] == baseEnergy:
+        else:
+            colors[2].append(data_plot.red)
+            colors[3].append(data_plot.green)
+        #else:
+        #    colors[2].append(data_plot.grey) # grey out matches
+        #    colors[3].append(data_plot.grey)
+
+
+        timeData[0][p]   = minTime # bottom values, smaller of the two
+        energyData[0][p] = minEnergy
+
+        timeData[1][p]   = max(baseTime,solMatrix[site][phase][0]) - minTime
+        energyData[1][p] = max(baseEnergy,solMatrix[site][phase][0]) - minEnergy
+
+    fig,axes,energyAxis = comparisonBar(timeData,energyData,twoAxes=True,colors=colors)
+
 
     fig.suptitle(site + " Oracle and Baseline Comparison (absolute)",y=1.01,fontsize='xx-large')
-    axes.set_xticklabels(phases)
+    axes.set_xticklabels(phasesSimple)
     axes.set_ylabel('Average Load Time (ms) per Phase')
-    energyAxis = axes.twinx()
     energyAxis.set_ylabel('Average Energy (mJ) per Phase')
+    #axes.legend(handles,('Oracle Time','Base time','Oracle Energy','Base Energy')) # TODO fix this to be generic
 
     fig.tight_layout()
     if writeOut:
@@ -97,17 +126,21 @@ def graphRelComparison(timeAndEnergy,solMatrix,site='amazon',outputPrefix="graph
     for p,phase in enumerate(phases):
         if solMatrix[site][phase] is None:
             continue
-        timeData[0][p]   = np.mean(timeAndEnergy['4l-4b']['ii'][site][phase]['loadtime']) / solMatrix[site][phase][0] # optimal values calculated for the phase
-        energyData[0][p] = np.mean(timeAndEnergy['4l-4b']['ii'][site][phase]['energy']) /solMatrix[site][phase][1] # offset on top of old data
+        timeData[0][p]   = timeAndEnergy['4l-4b']['ii'][site][phase]['loadtime'] / solMatrix[site][phase][0] # optimal values calculated for the phase
+        energyData[0][p] = timeAndEnergy['4l-4b']['ii'][site][phase]['energy'] /solMatrix[site][phase][1] # offset on top of old data
 
         timeErr[p]    = 0 # TODO find a way to scale error
         energyErr[p]  = 0
 
-    fig,axes = comparisonBar(timeData,energyData,timeErrBars=timeErr,energyErrBars=energyErr)
+    fig,axes,energyAxis = comparisonBar(timeData,energyData,timeErrBars=timeErr,energyErrBars=energyErr)
 
     fig.suptitle(site + " Oracle and Baseline Comparison (relative)",y=1.01,fontsize='xx-large')
-    axes.set_xticklabels(phases)
-    axes.set_ylabel('Times Improvement over baseline')
+    axes.set_xticklabels(phasesSimple)
+    axes.set_ylabel('Efficiency improvement over baseline')
+
+    l = newline([0,1],[1,1],axes) # draw a line at the breakeven point
+    l.set_linestyle('dashed')
+    l.set_color('black')
 
     fig.tight_layout()
     if writeOut:
@@ -117,19 +150,69 @@ def graphRelComparison(timeAndEnergy,solMatrix,site='amazon',outputPrefix="graph
         plt.show()
     plt.close(fig)
 
-def graphModelTime(solMatrix,outputPrefix="graphs/",writeOut=False):
+
+def graphComparisonAll(timeAndEnergy,solMatrix,outputPrefix="graphs/",writeOut=False):
+    values = np.zeros((1,3,len(sites)))
+# General shape is (layers,side by side bars (runs),number of data points per run)
+
+    
+
+    for s,site in enumerate(sites):
+        timeData = np.zeros(len(phases))
+        energyData = np.zeros(len(phases))
+
+        for p,phase in enumerate(phases):
+            if solMatrix[site][phase] is None:
+                timeData[p] = np.NaN
+                energyData[p] = np.NaN
+            else:
+                timeData[p]   = np.mean(timeAndEnergy['4l-4b']['ii'][site][phase]['loadtime']) / solMatrix[site][phase][0] # optimal values calculated for the phase
+                energyData[p] = np.mean(timeAndEnergy['4l-4b']['ii'][site][phase]['energy']) /solMatrix[site][phase][1] # offset on top of old data
+
+        values[0][0][s] = np.nanmin(timeData) # min val
+        values[0][1][s] = np.nanmax(timeData) # max val
+        values[0][2][s] = np.nanmean(timeData) # avg val
+
+    fig,axes,handles = genericCompBar(values)
+
+    fig.suptitle(site + " Oracle and Baseline Comparison (relative)",y=1.01,fontsize='xx-large')
+    axes.set_xticklabels(phasesSimple)
+    axes.set_ylabel('Efficiency improvement over baseline')
+
+    fig.tight_layout()
+    if writeOut:
+        plt.savefig(outputPrefix+site+"-comparison-rel.pdf",bbox_inches="tight")
+        plt.clf()
+    else: 
+        plt.show()
+    plt.close(fig)
+
+
+
+
+
+def graphModelTime(solMatrix,outputPrefix="graphs/",timeParam='optimize',writeOut=False):
+    if timeParam not in ['optimize','construction']:
+        raise Exception('Invalid time parameter: \"{}\" either optimize or construction'.format(timeParam))
     loadTimes = np.zeros(len(sites)) # displaying solution times of all phases
+    if timeParam == 'optimize':
+        ind = 3
+    else:
+        ind = 4
     for s,site in enumerate(sites):
         if not(solMatrix[site][phases[0]] is None):
-            loadTimes[s] = solMatrix[site][phases[0]][3] # only need one time for whole site
+            loadTimes[s] = solMatrix[site][phases[0]][ind] # only need one time for whole site
     (fig,axes) = generalBar(loadTimes*1000,sites)
 
-    fig.suptitle("Site Model Optimization Times",y=1.01,fontsize='xx-large')
+    if timeParam == 'optimize':
+        fig.suptitle("Site Model Optimization Times",y=1.01,fontsize='xx-large')
+    else:
+        fig.suptitle("Site Model Construction Times",y=1.01,fontsize='xx-large')
     axes.set_ylabel('Time to Optimize Model (ms)')
     axes.set_xticklabels(sites)
     fig.tight_layout()
     if writeOut:
-        plt.savefig(outputPrefix+"modeltimes.pdf",bbox_inches="tight")
+        plt.savefig(outputPrefix+"modeltimes-" + timeParam + ".pdf",bbox_inches="tight")
         plt.clf()
     else: 
         plt.show()
@@ -140,8 +223,9 @@ def graphModelTime(solMatrix,outputPrefix="graphs/",writeOut=False):
 def main():
     timeAndEnergy,coreConfigs = parseAndCalcEnergy(filePrefix="sim-data",iterations=20)
     timeAndEnergySet = avgMatrix(timeAndEnergy) # avg all iterations
-    solMatrix = solveConfigModel(timeAndEnergySet,coreConfigs,logFilename='sol_plot.log') # optimize model
+    solMatrix = solveConfigModel(timeAndEnergySet,coreConfigs,logFilename='gurobi_sol_plot.log') # optimize model
     verbose = True
+    #graphComparisonAll(timeAndEnergy,solMatrix,outputPrefix="graphs/",writeOut=False)
 
     for site in sites:
         if verbose:
@@ -150,13 +234,16 @@ def main():
         graphOptimal(timeAndEnergySet,coreConfigs,solMatrix,site=site,writeOut=True)
         if verbose:
             print("relative comparison")
-        graphRelComparison(timeAndEnergy,solMatrix,site=site,writeOut=True)
+        graphRelComparison(timeAndEnergySet,solMatrix,site=site,writeOut=True)
         if verbose:
             print("absolute comparison")
-        graphAbsComparison(timeAndEnergy,solMatrix,site=site,writeOut=True)
+        graphAbsComparison(timeAndEnergySet,solMatrix,site=site,writeOut=True)
     if verbose:
         print("model solving times")
-    graphModelTime(solMatrix,writeOut=True)
+    graphModelTime(solMatrix,timeParam='optimize',writeOut=True)
+    if verbose:
+        print("model construction times")
+    graphModelTime(solMatrix,timeParam='construction',writeOut=True)
 
 if __name__ == '__main__':
     main()
