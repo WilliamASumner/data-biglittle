@@ -27,10 +27,9 @@ for little in range(5): # 0 - 4
 govConfigs = ["ii"] #["ip","pi","pp","ii"]
 
 loadTypes           = ['navigationStart', 'requestStart', 'domLoading', 'domComplete', 'loadEventEnd' ]
-loadTypesEnglish    = ['Setup Connection','Download Page','Process Page','Run Dynamic Content']
-loadTypesEnglishMap = dict(zip(loadTypes[0:4],loadTypesEnglish))
-
 phases              = loadTypes[0:len(loadTypes)-1]
+phasesSimple        = ['Setup Connection','Download Page','Process Page','Run Dynamic Content']
+phaseMap            = dict(zip(phases,phasesSimple))
 
 sites = [ 'amazon',     'bbc',  'cnn',
           'craigslist', 'ebay', 'espn',
