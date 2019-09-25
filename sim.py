@@ -134,7 +134,8 @@ if __name__ == '__main__':
     timeAndEnergySet = avgMatrix(timeAndEnergy) # avg all iterations
     solution = solveConfigModel(timeAndEnergy,coreConfigs,logFilename='model_solve.log')
 
-    with open("sim-data-avg-optimal.txt","w") as outFile: # Write out results
+    with open("model-output-sim-data-avg.txt","w") as outFile: # Write out results
+        outFile.write("phase: [solution time, solution energy, configuration, run time, and construction time]")
         for site in sites:
             outFile.write(site+"\n")
             for phase in phases:
