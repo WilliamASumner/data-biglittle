@@ -7,7 +7,7 @@ import preprocess
 from preprocess import sites,loadTypes,phases,coreConfigs
 from preprocess import avgMatrix,parseAndCalcEnergy
 
-import os
+import os,time
 
 def extractMatrix(site,timeAndEnergy,matrixType):
     arr = np.zeros((len(phases),len(coreConfigs)))
@@ -46,6 +46,9 @@ def solveConfigModel(timeAndEnergySet,coreConfigs,filePrefix="sim-data",verbose=
 
         # optimize a site
         try:
+
+            #### timing model construction
+            start = time.time()
             model = gb.Model(site)
 
             decisionMatrix = [[ model.addVar(vtype=gb.GRB.BINARY,name=p+c) for c in coreConfigs] for p in phases]
@@ -58,6 +61,9 @@ def solveConfigModel(timeAndEnergySet,coreConfigs,filePrefix="sim-data",verbose=
 
             energySum = gb.quicksum(decisionMatrix[p][c]*energyMatrix[p][c] for c in range(numConfigs) for p in range(numPhases))
             model.setObjective(energySum, gb.GRB.MINIMIZE) # obj function
+
+            constructionTime = time.time()-start
+            ####
 
             model.optimize() # call upon the old magic
 
@@ -79,7 +85,7 @@ def solveConfigModel(timeAndEnergySet,coreConfigs,filePrefix="sim-data",verbose=
                         print("For phase: %s " % phase)
                     for c,config in enumerate(coreConfigs):
                         if siteSolution[p][c] > 0.99:
-                            phasesToOptVals[site][phase] = [timeMatrix[p][c],energyMatrix[p][c],config,model.runTime] # save the results we found
+                            phasesToOptVals[site][phase] = [timeMatrix[p][c],energyMatrix[p][c],config,model.runTime,constructionTime] # save the results we found
                             if verbose:
                                 print("\tConfig %s was chosen" % config)
 
@@ -107,7 +113,7 @@ def solveConfigModel(timeAndEnergySet,coreConfigs,filePrefix="sim-data",verbose=
                             print("For phase: %s " % phase)
                         for c,config in enumerate(coreConfigs):
                             if siteSolution[p][c] > 0.99:
-                                phasesToOptVals[site][phase] = [timeMatrix[p][c],energyMatrix[p][c],config,model.runTime] # save the results we found
+                                phasesToOptVals[site][phase] = [timeMatrix[p][c],energyMatrix[p][c],config,model.runTime,constructionTime] # save the results we found
                                 if verbose:
                                     print("\tConfig %s was chosen" % config)
                 elif verbose: print("No feasible solution possible, even with relaxation")
