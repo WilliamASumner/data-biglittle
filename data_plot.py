@@ -59,7 +59,7 @@ def generalBar(data,labels,axes=None,fig=None,width=0.35):
     axes.set_xticks(ind)
     return (fig,axes)
 
-def genericCompBar(data,axes=None,fig=None,timeErrBars=None,energyErrBars=None,width=0.35):
+def genericCompBar(data,axes=None,fig=None,timeErrBars=None,energyErrBars=None,width=1.0,colors=None,barh = False):
     # General shape is (# layers,#entries,#side by side bars)
     if len(data.shape) > 3:
         raise Exception("Invalid shape: {}, must be 3 or 2 dimensions".format(data.shape))
@@ -68,22 +68,29 @@ def genericCompBar(data,axes=None,fig=None,timeErrBars=None,energyErrBars=None,w
         fig, axes = plt.subplots(1,1, figsize=(8,8))
 
     handles = dict()
-    ind = np.arange(data.shape[-1])
+    ind = np.arange(data.shape[-1]) # number of groupings
+
 
     if len(data.shape) == 1:
-        if not(l in handles):
-            handles[l] = []
-        handles[l].append(axes.bar(ind+width*r,data,width)) # give handles similar structure to what they were 
+        if not(0 in handles):
+            handles[0] = []
+        handles[0].append(axes.bar(ind+width*r,data,width)) # give handles same as data
     else:
+        width *= 1/(data.shape[1]+1)
+        prevBottom = np.zeros(data.shape[-1])
         for l,layer in enumerate(data):
-            prevBottom = np.zeros(data.shape[-1])
             for r,run in enumerate(layer):
-                offset = width/data.shape[1] # offset by number of runs
                 if not(l in handles):
                     handles[l] = []
-                handles[l].append(axes.bar(ind+width*r,data[l][r],width,bottom=prevBottom)) # give handles similar structure to what they were 
-                prevBottom = data[l][r]
-    axes.set_xticks((ind+width*r)/2) # set up xticks
+                if barh:
+                    handles[l].append(axes.barh(ind+width*r,data[l][r],width,left=prevBottom,color=colors[r])) # give handles similar structure to what they were 
+                else:
+                    handles[l].append(axes.bar(ind+width*r,data[l][r],width,bottom=prevBottom,color=colors[r])) # give handles similar structure to what they were 
+            prevBottom = data[l][r]
+    if barh:
+        axes.set_yticks((ind+width*(r//2))) # set up xticks
+    else:
+        axes.set_xticks((ind+width*(r//2))) # set up xticks
 
     return (fig,axes,handles)
 
