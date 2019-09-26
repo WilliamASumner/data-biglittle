@@ -140,7 +140,7 @@ def graphRelComparison(timeAndEnergy,solMatrix,site='amazon',outputPrefix="graph
 
     l = newline([0,1],[1,1],axes) # draw a line at the breakeven point
     l.set_linestyle('dashed')
-    l.set_color('black')
+    l.set_color('grey')
 
     fig.tight_layout()
     if writeOut:
@@ -151,37 +151,55 @@ def graphRelComparison(timeAndEnergy,solMatrix,site='amazon',outputPrefix="graph
     plt.close(fig)
 
 
-def graphComparisonAll(timeAndEnergy,solMatrix,outputPrefix="graphs/",writeOut=False):
+def graphCompAllSites(timeAndEnergy,solMatrix,outputPrefix="graphs/",compType='loadtime',writeOut=False,horizontal=True):
+    compTypes = ['loadtime','energy']
+    if compType not in compTypes:
+        raise Exception('Invalid comparison type: \"{}\" either loadtime or energy'.format(compType))
     values = np.zeros((1,3,len(sites)))
+    palette = colors=[data_plot.blue,data_plot.red,data_plot.green]
 # General shape is (layers,side by side bars (runs),number of data points per run)
 
     
+    fig, axes = plt.subplots(1,1, figsize=(16,8)) # use a custom fig size
 
     for s,site in enumerate(sites):
-        timeData = np.zeros(len(phases))
-        energyData = np.zeros(len(phases))
+        data = np.zeros(len(phases))
 
         for p,phase in enumerate(phases):
             if solMatrix[site][phase] is None:
-                timeData[p] = np.NaN
-                energyData[p] = np.NaN
+                data[p] = np.NaN
             else:
-                timeData[p]   = np.mean(timeAndEnergy['4l-4b']['ii'][site][phase]['loadtime']) / solMatrix[site][phase][0] # optimal values calculated for the phase
-                energyData[p] = np.mean(timeAndEnergy['4l-4b']['ii'][site][phase]['energy']) /solMatrix[site][phase][1] # offset on top of old data
+                data[p]   = timeAndEnergy['4l-4b']['ii'][site][phase][compType] / solMatrix[site][phase][compTypes.index(compType)]
 
-        values[0][0][s] = np.nanmin(timeData) # min val
-        values[0][1][s] = np.nanmax(timeData) # max val
-        values[0][2][s] = np.nanmean(timeData) # avg val
+        values[0][0][s] = np.nanmin(data) # min val
+        values[0][1][s] = np.nanmax(data) # max val
+        values[0][2][s] = np.nanmean(data) # avg val
 
-    fig,axes,handles = genericCompBar(values)
+    fig,axes,handles = genericCompBar(values,fig=fig,axes=axes,colors=palette,barh=horizontal)
 
-    fig.suptitle(site + " Oracle and Baseline Comparison (relative)",y=1.01,fontsize='xx-large')
-    axes.set_xticklabels(phasesSimple)
-    axes.set_ylabel('Efficiency improvement over baseline')
+    title = compType + " comparisons for all sites (relative)"
+    fig.suptitle(title.title(),y=1.01,fontsize='xx-large')
+
+    if horizontal:
+        axes.set_yticklabels(sites)
+        axes.set_xlabel('Efficiency improvement over baseline')
+        l = newline([1,0],[1,1],axes) # draw a line at the breakeven point
+    else:
+        axes.set_xticklabels(sites)
+        axes.set_ylabel('Efficiency improvement over baseline')
+        l = newline([0,1],[1,1],axes) # draw a line at the breakeven point
+
+
+    axes.legend(handles[0],("Min","Max","Mean"))
+
+
+
+    l.set_linestyle('dashed')
+    l.set_color('grey')
 
     fig.tight_layout()
     if writeOut:
-        plt.savefig(outputPrefix+site+"-comparison-rel.pdf",bbox_inches="tight")
+        plt.savefig(outputPrefix+"All-sites-comparison-" + compType + ".pdf",bbox_inches="tight")
         plt.clf()
     else: 
         plt.show()
@@ -225,7 +243,6 @@ def main():
     timeAndEnergySet = avgMatrix(timeAndEnergy) # avg all iterations
     solMatrix = solveConfigModel(timeAndEnergySet,coreConfigs,logFilename='gurobi_sol_plot.log') # optimize model
     verbose = True
-    #graphComparisonAll(timeAndEnergy,solMatrix,outputPrefix="graphs/",writeOut=False)
 
     for site in sites:
         if verbose:
@@ -244,6 +261,12 @@ def main():
     if verbose:
         print("model construction times")
     graphModelTime(solMatrix,timeParam='construction',writeOut=True)
+    if verbose:
+        print("All sites loadtime comparison")
+    graphCompAllSites(timeAndEnergySet,solMatrix,outputPrefix="graphs/",writeOut=True,compType='loadtime')
+    if verbose:
+        print("All sites energy comparison")
+    graphCompAllSites(timeAndEnergySet,solMatrix,outputPrefix="graphs/",writeOut=True,compType='energy')
 
 if __name__ == '__main__':
     main()
