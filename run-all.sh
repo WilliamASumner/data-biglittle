@@ -77,7 +77,7 @@ for (( iter=1; iter <=$ITERATIONS; iter++ )); do
 
 	# for each governor, could be for each config first,
 	# but the idea behind looping through various configs 
-	# in the inner loop is to possiblity that caching will help a config
+	# in the inner loop is that the possiblity of caching will help a config
 	# since it will not be run consecutively 
 	for gov in "ii"; do #${itergovernor[@]}; do  # for each governor, configs could be looped through first,
 		gen_iterconfig
