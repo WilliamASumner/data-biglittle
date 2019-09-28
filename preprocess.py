@@ -26,9 +26,21 @@ for little in range(5): # 0 - 4
 
 govConfigs = ["ii"] #["ip","pi","pp","ii"]
 
+allLoadTypes = ['navigationStart', 'fetchStart', 'domainLookupStart',
+                      'domainLookupEnd', 'connectStart', 'connectEnd',
+                      #'secureConnectionStart', # this entry was not tested
+                      'requestStart',
+                      'responseStart', 'responseEnd', 'domLoading',
+                      'domInteractive', 'domContentLoadedEventStart',
+                      'domContentLoadedEventEnd', 'domComplete',
+                      'loadEventStart', 'loadEventEnd' ]
+
+
 loadTypes           = ['navigationStart', 'requestStart', 'domLoading', 'domComplete', 'loadEventEnd' ]
+#loadTypes           = allLoadTypes
 phases              = loadTypes[0:len(loadTypes)-1]
-phasesSimple        = ['Setup Connection','Download Page','Process Page','Run Dynamic Content']
+phasesSimple        = ['Setup Connection','Download Page','Process Page','Run Dynamic Content','End']
+#phasesSimple        = allLoadTypes
 phaseMap            = dict(zip(phases,phasesSimple))
 
 sites = [ 'amazon',     'bbc',  'cnn',
@@ -38,48 +50,41 @@ sites = [ 'amazon',     'bbc',  'cnn',
 
 powmon_sample_period = 100.0 # sample period is 100ms
 
-#loadTypes = ['navigationStart', 'fetchStart', 'domainLookupStart',
-#                      'domainLookupEnd', 'connectStart', 'connectEnd',
-#                      #'secureConnectionStart',
-#                      'requestStart',
-#                      'responseStart', 'responseEnd', 'domLoading',
-#                      'domInteractive', 'domContentLoadedEventStart',
-#                      'domContentLoadedEventEnd', 'domComplete',
-#                      'loadEventStart', 'loadEventEnd' ]
-
 
 # Functions
-def index_timestamp(timestamp,timestampArr):
+def indexTimestamp(timestamp,timestampArr):
     count = 0
     while(count < len(timestampArr) and timestampArr[count] < timestamp):
         count +=1
     return count
 
-def timestamp_interval(start,end,timestampArr):
-    start = index_timestamp(start,timestampArr)
-    end = index_timestamp(end,timestampArr)
+def timestampInterval(start,end,timestampArr):
+    start = indexTimestamp(start,timestampArr)
+    end = indexTimestamp(end,timestampArr)
+    if end < start:
+        return (-1,-1)
     return (start,end+1) # plus 1 for python indexing
 
-def filter_zeros(data): # remove 0 data
+def filterZeros(data): # remove less than 0 data
     return data[data >= 0]
 
-def filter_outliers(data, m): # remove outliers
+def filterOutliers(data, m): # remove outliers
     return data[abs(data - np.mean(data)) < m * np.std(data)]
 
-def cleanup_entry(entry,m=2):
-    return filter_zeros(filter_outliers(entry,m))
+def cleanup_entry(entry,m):
+    return filterZeros(filterOutliers(entry,m))
 
-def cleanup_data(data):
+def cleanupData(data,m=3):
     for coreConfig in coreConfigs:
         for govConfig in govConfigs:
             for site in sites:
                 for loadType in loadTypes:
                     for matrixType in ["loadtime","energy"]:
                         data[coreConfig][govConfig][site][loadType][matrixType] = \
-                            cleanup_entry(data[coreConfig][govConfig][site][loadType][matrixType],m=3)
+                            cleanup_entry(data[coreConfig][govConfig][site][loadType][matrixType],m)
 
 
-def parseAndCalcEnergy(filePrefix="sim-data-", iterations=10,verbose=False):
+def parseAndCalcEnergy(filePrefix="sim-data-", iterations=10,cleanData=True,verbose=False):
     if filePrefix[-1] != '-': # some quick error checking
         filePrefix += "-"
 
@@ -98,8 +103,9 @@ def parseAndCalcEnergy(filePrefix="sim-data-", iterations=10,verbose=False):
     websiteData =   dict(zip(coreConfigs,[deepcopy(byGov) for config in coreConfigs]))
 
     knownCoreConfigs = []
+    collectedIterations = 0
 
-    for coreConfig in coreConfigs: # load/organize the data
+    for coreConfig in coreConfigs:
         pmcFile = pmcPrefix + coreConfig + "-"
         jsonFilePrefix = jsonPrefix + coreConfig + "-"
         for govConfig in govConfigs:
@@ -113,6 +119,7 @@ def parseAndCalcEnergy(filePrefix="sim-data-", iterations=10,verbose=False):
             if len(ids) != 0: # we found a file!
                 if not coreConfig in knownCoreConfigs:
                     knownCoreConfigs.append(coreConfig) # track which core configs we've found
+
             for fileIndex,fileID in enumerate(ids): # for each pair of data files
                 iteration = fileIndex
                 if (iteration >= iterations):
@@ -126,8 +133,12 @@ def parseAndCalcEnergy(filePrefix="sim-data-", iterations=10,verbose=False):
                     print ("on file " + pmcFile)
                     print("with file " + jsonFile)
 
-                pmcData = pmc.read_data(pmcFile) # ndarray
-                jsonData = pj.read_selenium_data(jsonFile) # dict of mixed types
+                try:
+                    pmcData = pmc.read_data(pmcFile) # ndarray
+                    jsonData = pj.read_selenium_data(jsonFile) # dict of mixed types
+                except:
+                    continue
+                collectedIterations += 1
 
                 energyThreshold = 0.01
                 for site in sites:
@@ -136,9 +147,18 @@ def parseAndCalcEnergy(filePrefix="sim-data-", iterations=10,verbose=False):
                             loadtime = jsonData['timestamps'][site][0][loadTypes[index+1]][0] - jsonData['timestamps'][site][0][loadType][0]
                             websiteData[coreConfig][govConfig][site][loadType]['loadtime'][iteration] = loadtime
 
-                            start,end = timestamp_interval(int(jsonData['timestamps'][site][0][loadType][0]),
+                            if loadtime == 0: # don't waste time on 0 energies
+                                websiteData[coreConfig][govConfig][site][loadType]['energy'][iteration] = -100
+                                continue
+
+                            start,end = timestampInterval(int(jsonData['timestamps'][site][0][loadType][0]),
                                     int(jsonData['timestamps'][site][0][loadTypes[index+1]][0]),
                                     pmcData['Time_Milliseconds'])
+                            if start == -1 or end == -1: # error getting timestamp
+                                if verbose:
+                                    print("unable to calculate timestamps in loadType " + loadType + ",skipping...")
+                                continue
+
                             if (start == end-1 and end < len(pmcData['Power_A7'])): # time interval is lower than our powmon recorded, estimate
                                 scaleFactor = loadtime/powmon_sample_period
                                 minPower = min(pmcData['Power_A7'][start-1],pmcData['Power_A7'][end])
@@ -148,9 +168,12 @@ def parseAndCalcEnergy(filePrefix="sim-data-", iterations=10,verbose=False):
                                 maxPower = max(pmcData['Power_A15'][start-1],pmcData['Power_A15'][end])
                                 energyBig = (minPower + 0.5*(maxPower-minPower)) * scaleFactor * (pmcData['Time_Milliseconds'][end] - pmcData['Time_Milliseconds'][start])
                                 energy = energyBig + energyLittle
-                                if energy <= energyThreshold and verbose:
-                                    print("0 energy calculated from (" + str(minPower) + "0.5*(" + str(maxPower) + "-" + str(minPower) + ")) * " + str(scaleFactor))
-                                    print("scaleFactor = " + str(loadtime) + "/" + str(powmon_sample_period))
+                                if energy <= energyThreshold:
+                                    if verbose:
+                                        print("In loadType: " + loadType)
+                                        print("0 energy calculated from (" + str(minPower) + " * 0.5*(" + str(maxPower) + "-" + str(minPower) + ")) * " + str(scaleFactor))
+                                        print("scaleFactor = " + str(loadtime) + "/" + str(powmon_sample_period))
+                                        print("loadtime = " + str(jsonData['timestamps'][site][0][loadTypes[index+1]][0])  + " - " + str(jsonData['timestamps'][site][0][loadType][0]))
                                     if loadtime == 0: # if we didn't get any meaningful data because of a low loadtime
                                         energy = -100 # make sure it gets filtered out
                             elif start == end -1: # edge case where data is not available
@@ -174,8 +197,9 @@ def parseAndCalcEnergy(filePrefix="sim-data-", iterations=10,verbose=False):
                                 websiteData[coreConfig][govConfig][site][loadType]['energy'][iteration] = \
                                         energy*(loadtime/powmon_sample_period)
 
-    cleanup_data(websiteData)
-    return (websiteData,knownCoreConfigs)
+    if cleanData:
+        cleanupData(websiteData,m=3)
+    return (websiteData,knownCoreConfigs,collectedIterations)
 
 def avgMatrix(timeAndEnergy,iterStart=0,iterStop=0): # return avged matrix
     if iterStop == 0:
@@ -191,4 +215,10 @@ def avgMatrix(timeAndEnergy,iterStart=0,iterStop=0): # return avged matrix
     return timeAndEnergy
 
 if __name__ == "__main__":
-    print(analyzeData(3))
+    print("Processing data...")
+    data,foundConfigs,maxIterations = parseAndCalcEnergy(filePrefix="sim-data-",iterations=20)[0]
+    if sys.flags.interactive: # we are in an interactive shell
+        print("Running in interactive mode: type 'data' to see data values")
+    else:
+        print(data) # just print
+        print("Running this file with python -i will allow you to interact directly with the data")
