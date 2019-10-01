@@ -135,7 +135,7 @@ if __name__ == '__main__':
     solution = solveConfigModel(timeAndEnergy,coreConfigs,logFilename='model_solve.log')
 
     with open("model-output-sim-data-avg.txt","w") as outFile: # Write out results
-        outFile.write("phase: [solution time, solution energy, configuration, run time, and construction time]")
+        outFile.write("phase: [solution time, solution energy, configuration, run time, and construction time]\n")
         for site in sites:
             outFile.write(site+"\n")
             for phase in phases:
