@@ -3,9 +3,8 @@ import numpy as np
 import gurobipy as gb # ILP Library
 
 # Local files
-import preprocess
 from preprocess import sites,loadTypes,phases,coreConfigs
-from preprocess import avgMatrix,parseAndCalcEnergy
+import preprocess as preproc
 
 import os,time
 
@@ -97,7 +96,7 @@ def solveConfigModel(timeAndEnergySet,coreConfigs,filePrefix="sim-data",verbose=
                 # minrelax - whether to minimize objective function (false) or objective function AND violation (true, our case)
                 # vrelax - whether to variable bounds can be relaxed (false in our case)
                 # crelax - whether constraints can be relaxed (true, we can increase our cutoff time a bit...)
-                model.feasRelaxS(1,True,False,True)
+                model.feasRelaxS(1,True,True,False)
                 model.optimize()
 
                 if model.status == gb.GRB.Status.OPTIMAL:
@@ -116,6 +115,7 @@ def solveConfigModel(timeAndEnergySet,coreConfigs,filePrefix="sim-data",verbose=
                                 phasesToOptVals[site][phase] = [timeMatrix[p][c],energyMatrix[p][c],config,model.runTime,constructionTime] # save the results we found
                                 if verbose:
                                     print("\tConfig %s was chosen" % config)
+                            elif verbose: print("\tSolution value: %d was not high enough" %siteSolution[p][c])
                 elif verbose: print("No feasible solution possible, even with relaxation")
 
 
@@ -130,9 +130,9 @@ def solveConfigModel(timeAndEnergySet,coreConfigs,filePrefix="sim-data",verbose=
     return phasesToOptVals
 
 if __name__ == '__main__':
-    timeAndEnergy,coreConfigs = parseAndCalcEnergy("sim-data",iterations=20)
-    timeAndEnergySet = avgMatrix(timeAndEnergy) # avg all iterations
-    solution = solveConfigModel(timeAndEnergy,coreConfigs,logFilename='model_solve.log')
+    timeAndEnergy,coreConfigs,maxIterations = preproc.parseAndCalcEnergy("sim-data",iterations=20)
+    preproc.avgMatrix(timeAndEnergy) # avg all iterations
+    solution = solveConfigModel(timeAndEnergy,coreConfigs,logFilename='model_solve.log',verbose=True)
 
     with open("model-output-sim-data-avg.txt","w") as outFile: # Write out results
         outFile.write("phase: [solution time, solution energy, configuration, run time, and construction time]\n")
