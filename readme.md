@@ -9,9 +9,10 @@ Example:
 `sudo ./run.sh 0-3 amazon-little`
 
 ## Software needed to generate data:
-* bbench3.0
-* southhampton monitor
-* a browser
+* [bbench3.0](http://bbench.eecs.umich.edu/downloads.html)
+* [southhampton monitor and ISO](http://www.powmon.ecs.soton.ac.uk/powermodeling/downloads.html)
+* [python](https://www.python.org/downloads/)
+* [selenium](https://selenium-python.readthedocs.io/installation.html)
 
 ## Files and their usage
 * *run.sh* - bash script to set governor, core configuration, etc and run a single selenium test
