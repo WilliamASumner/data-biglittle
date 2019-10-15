@@ -9,3 +9,4 @@ plots/
 errlog
 .*.swp
 *.txt
+*.json
