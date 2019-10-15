@@ -56,7 +56,7 @@ def solveConfigModel(timeAndEnergySet,coreConfigs,filePrefix="sim-data",verbose=
                 model.addConstr(gb.quicksum([decisionMatrix[p][c] for c in range(numConfigs)]) == 1, name=phase)
 
             timeSum = gb.quicksum(decisionMatrix[p][c]*timeMatrix[p][c] for c in range(numConfigs) for p in range(numPhases))
-            model.addConstr(timeSum <= 3000, name='t') # time constraint
+            timeConstr = model.addConstr(timeSum <= 3000, name='time') # time constraint
 
             energySum = gb.quicksum(decisionMatrix[p][c]*energyMatrix[p][c] for c in range(numConfigs) for p in range(numPhases))
             model.setObjective(energySum, gb.GRB.MINIMIZE) # obj function
@@ -96,7 +96,10 @@ def solveConfigModel(timeAndEnergySet,coreConfigs,filePrefix="sim-data",verbose=
                 # minrelax - whether to minimize objective function (false) or objective function AND violation (true, our case)
                 # vrelax - whether to variable bounds can be relaxed (false in our case)
                 # crelax - whether constraints can be relaxed (true, we can increase our cutoff time a bit...)
-                model.feasRelaxS(1,True,True,False)
+                #model.feasRelaxS(1,True,True,False)
+                timeConstr = model.getConstrByName('time')
+                model.remove(timeConstr)
+                model.reset()
                 model.optimize()
 
                 if model.status == gb.GRB.Status.OPTIMAL:
@@ -115,7 +118,6 @@ def solveConfigModel(timeAndEnergySet,coreConfigs,filePrefix="sim-data",verbose=
                                 phasesToOptVals[site][phase] = [timeMatrix[p][c],energyMatrix[p][c],config,model.runTime,constructionTime] # save the results we found
                                 if verbose:
                                     print("\tConfig %s was chosen" % config)
-                            elif verbose: print("\tSolution value: %d was not high enough" %siteSolution[p][c])
                 elif verbose: print("No feasible solution possible, even with relaxation")
 
 
