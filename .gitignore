@@ -7,3 +7,4 @@ powmon-data/.old-data
 *.pyc
 plots/
 errlog
+.*.swp
