@@ -8,3 +8,4 @@ powmon-data/.old-data
 plots/
 errlog
 .*.swp
+*.txt
