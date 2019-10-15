@@ -13,10 +13,14 @@ import pmc
 import process_json as pj
 
 orange = (1, .7, .43)
-red = (1, .46, .43)
-green = (.36, .84, .42)
-blue = (.31, .68, .71)
-grey = (.7, .7, .7)
+red    = (1, .46, .43)
+green  = (.36, .84, .42)
+blue   = (.31, .68, .71)
+grey   = (.7, .7, .7)
+cyan   = "#2E978F"
+maroon = "#872D62"
+purple = "#542B72"
+yellow = "#FFF574"
 
 def annotate_ax(ax,xy,desc="Description",offset=(5,5)):
     ax.annotate(desc,
@@ -59,7 +63,7 @@ def generalBar(data,labels,axes=None,fig=None,width=0.35):
     axes.set_xticks(ind)
     return (fig,axes)
 
-def genericCompBar(data,axes=None,fig=None,timeErrBars=None,energyErrBars=None,width=1.0,colors=None,barh = False):
+def genericCompBar(data,axes=None,fig=None,errBars=None,width=1.0,colors=None,barh = False):
     # General shape is (# layers,#entries,#side by side bars)
     if len(data.shape) > 3:
         raise Exception("Invalid shape: {}, must be 3 or 2 dimensions".format(data.shape))
@@ -85,7 +89,10 @@ def genericCompBar(data,axes=None,fig=None,timeErrBars=None,energyErrBars=None,w
                 if barh:
                     handles[l].append(axes.barh(ind+width*r,data[l][r],width,left=prevBottom,color=colors[r])) # give handles similar structure to what they were 
                 else:
-                    handles[l].append(axes.bar(ind+width*r,data[l][r],width,bottom=prevBottom,color=colors[r])) # give handles similar structure to what they were 
+                    if errBars is None:
+                        handles[l].append(axes.bar(ind+width*r,data[l][r],width,bottom=prevBottom,color=colors[r])) # give handles similar structure to what they were 
+                    else:
+                        handles[l].append(axes.bar(ind+width*r,data[l][r],width,bottom=prevBottom,color=colors[r],yerr=errBars[l][r],capsize=4)) # give handles similar structure to what they were 
             prevBottom = data[l][r]
     if barh:
         axes.set_yticks((ind+width*(r//2))) # set up xticks
@@ -180,24 +187,73 @@ def siteScatterPlot(timeAndEnergySet,coreConfigs,site='amazon',axes=None,figure=
         display = tuple([i for i in range(len(coreConfigs))]) # only display the first few handles
         fig.legend([handle for i,handle in enumerate(handles) if i in display],
                       [label for i,label in enumerate(labels) if i in display],
-                      bbox_to_anchor=(1.2,1),
+                      bbox_to_anchor=(1.2,1), # push legend off of figure
                       loc="upper right",
                       bbox_transform=plt.gcf().transFigure)
         return (fig,ax)
 
+def adjacent_values(vals, q1, q3):
+    upper_adjacent_value = q3 + (q3 - q1) * 1.5
+    upper_adjacent_value = np.clip(upper_adjacent_value, q3, vals[-1])
+
+    lower_adjacent_value = q1 - (q3 - q1) * 1.5
+    lower_adjacent_value = np.clip(lower_adjacent_value, vals[0], q1)
+    return lower_adjacent_value, upper_adjacent_value
+
+def violinPlot(data,axes=None,fig=None):
+    if axes is None or fig is None: # if no fig
+        fig,axes = plt.subplots(1,1,figsize=(8,8)) # create a new figure
+    else:
+        axes = axes
+        fig = fig
+
+    parts = axes.violinplot(
+            data, showmeans=True, showmedians=True,
+            showextrema=True)
+
+    for pc in parts['bodies']:
+        pc.set_facecolor(red)
+        pc.set_edgecolor(grey)
+        pc.set_alpha(1)
+
+    quartile1, medians, quartile3 = np.percentile(data, [25, 50, 75], axis=1)
+    means = np.mean(data,axis=1)
+    whiskers = np.array([
+        adjacent_values(sorted_array, q1, q3)
+        for sorted_array, q1, q3 in zip(data, quartile1, quartile3)])
+    whiskersMin, whiskersMax = whiskers[:, 0], whiskers[:, 1]
+
+    inds = np.arange(1, len(medians) + 1)
+    medianHandle = axes.scatter(inds, medians, marker='o', color='white',edgecolor='grey', s=40, zorder=3)
+    axes.scatter(inds, means, marker='o', color=blue, s=40, zorder=3)
+    axes.vlines(inds, quartile1, quartile3, color='k', linestyle='-', lw=5)
+    axes.vlines(inds, whiskersMin, whiskersMax, color='k', linestyle='-', lw=1)
+
+    return (fig,axes,medianHandle)
+
+
+
+
 def main():
-    graphType = "scatter"
-    if len(sys.argv) > 1 and sys.argv[1] in ["scatter","stackedbar"]:
+    graphType = "siteScatter"
+    if len(sys.argv) > 1 and sys.argv[1] in ["siteScatter","stackedbar"]:
         graphType = sys.argv[1]
 
     outputPrefix = "graphs/"
 
-    energyAndTime,knownCoreConfigs = preprocess.parseAndCalcEnergy(iterations=20,filePrefix="sim-data",verbose=True)
+    energyAndTime,knownCoreConfigs,maxIterations = preprocess.parseAndCalcEnergy(iterations=20,filePrefix="sim-data",cleanData=True)
+    preprocess.avgMatrix(energyAndTime)
 
-    if graphType == "scatter":
-        siteScatterPlot(energyAndTime,outputPrefix,knownCoreConfigs)
+    if graphType == "siteScatter":
+        fig,ax = siteScatterPlot(energyAndTime,knownCoreConfigs)
+        fig.tight_layout()
         plt.show()
         #plt.savefig(outputPrefix+site+"-"+gov+"-scatter.pdf")
+    elif graphType == "pmcGraph":
+        siteScatterPlot(energyAndTime,knownCoreConfigs)
+        plt.show()
+
+
 
 if __name__ == "__main__":
     main()
